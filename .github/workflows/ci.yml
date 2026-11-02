@@ -1,0 +1,45 @@
+# CI · lancée sur chaque pull request vers main (et à chaque merge).
+# Deux contrôles, sans aucun accès à Snowflake :
+#   1. terraform : le code est bien formaté et valide
+#   2. données   : le générateur tourne et validate.py retrouve toutes les fraudes (VALIDATION OK)
+# Le `terraform plan` en CI viendra avec le state distant (HCP Terraform) : sans state partagé,
+# la CI ne sait pas ce qui existe déjà et proposerait de tout recréer.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Format
+        run: terraform fmt -check -recursive
+      - name: Init (sans backend, juste pour télécharger le provider)
+        run: terraform init -backend=false
+      - name: Validate
+        run: terraform validate
+
+  data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Générer les données (seed 42)
+        run: python data_generator/generate.py --seed 42
+      - name: Vérifier que toutes les fraudes sont retrouvées
+        run: python data_generator/validate.py --data data
