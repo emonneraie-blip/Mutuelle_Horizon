@@ -31,15 +31,13 @@ def lire(sql):
 st.set_page_config(page_title="Contrôle anti-fraude", layout="wide")
 st.title("Mutuelle Horizon Santé · factures optique à contrôler")
 
-kpi = lire(f"SELECT * FROM {KPI} ORDER BY batch_date DESC")
+kpi = lire(f"SELECT *, convert_timezone('Europe/Paris', calcule_le)::timestamp_ntz AS calcule_le_paris FROM {KPI} ORDER BY batch_date DESC")
 if kpi.empty:
     st.warning("Aucun lot n'a encore été traité.")
     st.stop()
 
 dernier = kpi.iloc[0]
-calcule_le = pd.Timestamp(dernier["calcule_le"])
-if calcule_le.tzinfo is not None:
-    calcule_le = calcule_le.tz_convert("Europe/Paris")      # Snowflake répond dans le fuseau du compte
+calcule_le = pd.Timestamp(dernier["calcule_le_paris"])
 st.caption(f"Dernier lot traité : {dernier['batch_date']} · calculé le {calcule_le:%d/%m/%Y à %H:%M} (Paris) · données fictives")
 
 c1, c2, c3, c4 = st.columns(4)
