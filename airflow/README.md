@@ -38,7 +38,9 @@ Interface : http://localhost:8080. Activer le DAG avec l'interrupteur, à gauche
 
 ## Tester sans les images (PIPELINE_DRY_RUN=1)
 
-Chaque tâche affiche sa commande au lieu de la lancer. On vérifie ainsi l'ordre des tâches, la date du lot et les relances. Mettre `PIPELINE_DRY_RUN=0` quand les deux images existent, puis `docker compose up -d` pour relire le `.env`.
+Chaque tâche affiche sa commande au lieu de la lancer. On vérifie ainsi l'ordre des tâches, la date du lot et les relances.
+
+**Sur la machine de démo, mettre `PIPELINE_DRY_RUN=0`** dans `airflow/.env` (les vraies images `fraud-ingest:1.0.0` et `fraud-dbt:1.0.0` doivent être construites), puis `docker compose up -d` pour relire le `.env`.
 
 ## Les dates de la démo
 

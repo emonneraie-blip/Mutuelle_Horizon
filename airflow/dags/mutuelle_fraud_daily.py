@@ -15,6 +15,7 @@ Préchargement : rattrapage des dates logiques du 27/10 au 04/11 (lots du 26/10 
 import json
 import os
 import urllib.request
+from datetime import date, timedelta
 
 import pendulum
 from airflow.providers.docker.operators.docker import DockerOperator
@@ -65,8 +66,10 @@ ENV_DBT = {
 def alert_discord(context):
     """Appelée après le DERNIER échec d'une tâche (les relances sont déjà épuisées)."""
     ti = context["task_instance"]
+    # context["ds"] = date du RUN. Le lot traité est la veille : c'est lui qu'on annonce.
+    lot = (date.fromisoformat(context["ds"]) - timedelta(days=1)).isoformat()
     text = (f":red_circle: Mutuelle Horizon - tâche **{ti.task_id}** en échec pour le lot du "
-            f"{context['ds']} (essai {ti.try_number}). Logs : {ti.log_url}")
+            f"{lot} (run du {context['ds']}, essai {ti.try_number}). Logs : {ti.log_url}")
     url = os.environ.get("DISCORD_WEBHOOK_URL", "")
     if url == "":
         print("ALERTE (pas de webhook Discord configuré) :", text)
