@@ -23,7 +23,7 @@ variable "private_key_path" {
 variable "lucas_user" {
   description = "Nom de l'utilisateur Snowflake de Lucas (propriétaire du compte)"
   type        = string
-  default     = "LSTEFANI@ALBERTSCHOOL.COM"
+  default     = "lstefani"
 }
 
 variable "svc_ingest_public_key" {

@@ -42,4 +42,4 @@ jobs:
       - name: Générer les données (seed 42)
         run: python data_generator/generate.py --seed 42
       - name: Vérifier que toutes les fraudes sont retrouvées
-        run: python data_generator/validate.py --data data
+        run: python data_generator/validate.py --data data --each-day

@@ -29,7 +29,7 @@
 | Entrepôts XSMALL, auto-suspend 60 s | `INGEST_WH`, `TRANSFORM_WH`, `BI_WH` |
 | Rôles (rattachés à SYSADMIN) | `INGEST_ROLE`, `TRANSFORM_ROLE`, `ANALYST_ROLE` |
 | Comptes de service (clé RSA seule) | `SVC_INGEST`, `SVC_TRANSFORM` |
-| Accès prof | `REDGRAVE_GRADER` : lecture sur tout ce qui sera créé dans `MUTUELLE_FRAUD` |
+| Accès prof | `REDGRAVE_GRADER` : USAGE sur la base et `BI_WH` ; lecture de SILVER, GOLD et OPS donnée par dbt (jamais BRONZE) |
 
 Les schémas ne sont pas créés ici : `BRONZE` est créé par `INGEST_ROLE`, `SILVER`/`GOLD`/`OPS` par `TRANSFORM_ROLE`.
 

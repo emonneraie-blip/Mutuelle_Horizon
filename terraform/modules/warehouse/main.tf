@@ -1,4 +1,4 @@
-# Module: one Snowflake warehouse with the club's cost rules built in.
+# Module : un entrepôt Snowflake avec nos règles de coût (arrêt après 60 s, démarrage à la demande).
 terraform {
   required_providers {
     snowflake = { source = "snowflakedb/snowflake" }
