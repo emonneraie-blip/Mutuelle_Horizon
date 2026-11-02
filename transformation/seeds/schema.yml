@@ -6,3 +6,5 @@ seeds:
     description: Garantie optique de chaque formule (hypothèse du projet).
   - name: fraud_answer_key
     description: Corrigé du jeu officiel. Sert uniquement aux tests d'acceptation, jamais aux règles.
+  - name: quarantine_key
+    description: Lignes invalides injectées dans le jeu officiel. Sert uniquement au test d'acceptation de la quarantaine.

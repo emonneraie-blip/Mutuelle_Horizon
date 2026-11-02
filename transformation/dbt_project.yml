@@ -41,3 +41,9 @@ seeds:
         siret_opticien: varchar
         montant_demande_amc: decimal(12, 2)
         detail: varchar
+    quarantine_key:
+      +schema: OPS                       # sert au test d'acceptation de la quarantaine
+      +column_types:
+        id_demande: varchar
+        reason: varchar
+        date_reception: date

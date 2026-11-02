@@ -29,16 +29,11 @@ with typees as (
 
 select
     *,
+    -- Mêmes codes et même ordre que quarantine_reason() dans validate.py
     case
-        when id_demande is null then 'identifiant manquant'
-        when date_soins is null then 'date de soins illisible ou impossible'
-        when date_reception is null then 'date de réception illisible'
-        when date_soins > date_reception then 'date de soins après la réception'
-        when montant_demande_amc is null then 'montant demandé illisible'
-        when montant_demande_amc < 0 or montant_total < 0 then 'montant négatif'
-        when num_adherent is null then 'adhérent manquant'
-        when length(siret_opticien) <> 14 then 'SIRET invalide'
-        when classe not in ('A', 'B') then 'classe inconnue'
-        when categorie_verres not in ('SIMPLE', 'MIXTE', 'COMPLEXE', 'TRES_COMPLEXE') then 'catégorie inconnue'
+        when date_reception is null then 'DATE_RECEPTION_INVALIDE'
+        when date_soins is null then 'DATE_SOINS_INVALIDE'
+        when montant_demande_amc is null then 'MONTANT_MANQUANT'
+        when montant_demande_amc < 0 or montant_total < 0 then 'MONTANT_NEGATIF'
     end as motif_rejet
 from typees
