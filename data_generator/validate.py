@@ -68,7 +68,7 @@ def clean_amount(v):
     v = clean_text(v)
     if not v:
         return None
-    v = v.replace("€", "").replace(" ", "").replace(" ", "")
+    v = v.replace("€", "").replace("\u00a0", "").replace("\u202f", "").replace(" ", "")   # spaces, non-breaking spaces
     if "," in v and "." not in v:
         v = v.replace(",", ".")
     try:

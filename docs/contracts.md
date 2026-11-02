@@ -52,7 +52,7 @@ See `data/answer_key/noise_report.json` for the exact counts.
 | Mess | Example | Silver fix |
 |---|---|---|
 | Dates in 3 formats | `2026-10-21`, `21/10/2026`, `20261021` | `COALESCE(TRY_TO_DATE(v,'YYYY-MM-DD'), TRY_TO_DATE(v,'DD/MM/YYYY'), TRY_TO_DATE(v,'YYYYMMDD'))` |
-| Amounts as text | `90,20`, `1 234,50 €` | remove `€` and spaces, decimal comma → point, `TRY_TO_NUMBER(v, 12, 2)` |
+| Amounts as text | `90,20`, `1 234,50 €` | remove `€` and spaces (including non-breaking spaces U+00A0 / U+202F), decimal comma → point, `TRY_TO_NUMBER(v, 12, 2)` |
 | Missing markers | `''`, `N/A`, `null`, `-` | → NULL |
 | Codes with case / spaces | ` simple `, `Simple` | `UPPER(TRIM())` |
 | Ids with spaces | `074 789 535 205 83` (SIRET), NIR in blocks | `REGEXP_REPLACE(v, '[^0-9]', '')` |

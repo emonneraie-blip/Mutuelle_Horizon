@@ -93,6 +93,14 @@ run jobs.seed_postgres --date history                   # 8 000 adhérents, joue
 run jobs.bootstrap_bronze
 ```
 
+`bootstrap_bronze` utilise `CREATE TABLE IF NOT EXISTS` : il ne modifie **jamais** une table qui existe déjà. Si `BRONZE.ADHERENTS` a été créée avant la minimisation (avec NIR, nom, etc.), la supprimer d'abord, puis relancer le bootstrap (le prochain `load_adherents_incremental` refait un chargement complet, watermark 1900-01-01) :
+
+```sql
+USE ROLE INGEST_ROLE;
+DROP TABLE IF EXISTS MUTUELLE_FRAUD.BRONZE.ADHERENTS_STG;
+DROP TABLE IF EXISTS MUTUELLE_FRAUD.BRONZE.ADHERENTS;
+```
+
 ### 5. Charger l'historique et les références
 
 ```bash
