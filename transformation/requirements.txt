@@ -1,0 +1,3 @@
+# Versions figées, comme au TD : la même image se reconstruit à l'identique.
+dbt-core==1.11.16
+dbt-snowflake==1.11.6

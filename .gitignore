@@ -24,3 +24,4 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+transformation/.user.yml

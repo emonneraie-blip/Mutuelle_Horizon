@@ -1,0 +1,43 @@
+# Mutuelle Horizon Santé · BRONZE -> SILVER -> GOLD
+name: mutuelle_dbt
+version: "1.0.0"
+config-version: 2
+profile: mutuelle_dbt
+require-dbt-version: [">=1.11.0", "<1.12.0"]
+
+# Date du lot traité. Airflow la donne : dbt build --vars '{batch_date: 2026-11-04}'
+# Sans date, on prend le dernier lot de factures présent dans silver.
+vars:
+  batch_date: null
+
+on-run-end:
+  - "{{ log_dbt_results(results) }}"
+  - "{{ grant_acces_schemas() }}"
+
+# Droits posés à chaque build, uniquement sur les couches autorisées. BRONZE reste fermé à la prof.
+models:
+  mutuelle_dbt:
+    +grants:
+      select: ['REDGRAVE_GRADER']
+    silver:
+      +schema: SILVER
+      +materialized: table
+    gold:
+      +schema: GOLD
+      +materialized: table
+
+seeds:
+  mutuelle_dbt:
+    +grants:
+      select: ['REDGRAVE_GRADER']
+    +schema: SILVER
+    fraud_answer_key:
+      +schema: OPS                       # sert au test d'acceptation, jamais aux règles
+      +column_types:
+        id_demande: varchar
+        fraud_type: varchar
+        date_reception: date
+        num_adherent: varchar
+        siret_opticien: varchar
+        montant_demande_amc: decimal(12, 2)
+        detail: varchar
