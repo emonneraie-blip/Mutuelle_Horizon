@@ -59,3 +59,9 @@ terraform destroy
 
 Puis, dans Snowsight, avec ACCOUNTADMIN : `DROP USER SVC_TERRAFORM;` et `DROP RESOURCE MONITOR MUTUELLE_MONITOR;`.
 
+
+## State distant (HCP Terraform)
+
+Le state est stocké sur HCP Terraform (organisation `mutuelle-horizon`, workspace `mutuelle-fraud`, voir `backend.tf`) : versionné, verrouillé pendant un `apply`, hors de Git.
+Execution Mode = Local : le `plan` et l'`apply` tournent sur la machine d'Eliott avec sa clé, HCP ne stocke que le state.
+Pour lancer Terraform : `terraform login` (jeton HCP), puis `terraform init`.
