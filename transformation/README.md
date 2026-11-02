@@ -17,7 +17,7 @@ Contrat avec l'ingestion : `docs/contracts.md`.
 ```bash
 cd transformation
 export SNOWFLAKE_ACCOUNT=<voir .env> SNOWFLAKE_USER=CLEMENT SNOWFLAKE_PRIVATE_KEY_FILE=~/keys/rsa_key.p8
-export DBT_PROFILES_DIR=. NIR_SALT=<valeur partagée, jamais dans Git>   # sans elle, dbt refuse de démarrer
+export DBT_PROFILES_DIR=. NIR_SALT=<valeur partagée, jamais dans Git>   # 16 caractères minimum, sinon dbt refuse de démarrer
 dbt debug                                        # teste la connexion
 dbt build --vars '{batch_date: 2026-11-03}'      # construit et teste tout pour ce lot
 dbt docs generate && dbt docs serve              # le graphe de lineage
