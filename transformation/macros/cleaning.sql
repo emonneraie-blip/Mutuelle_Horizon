@@ -30,7 +30,7 @@
 
 {# Le sel rend l'empreinte impossible à retrouver en essayant tous les NIR possibles #}
 {% macro hash_nir(col) -%}
-    sha2('{{ env_var("NIR_SALT", "") }}' || {{ clean_digits(col) }}, 256)
+    sha2('{{ env_var("NIR_SALT") }}' || {{ clean_digits(col) }}, 256)
 {%- endmacro %}
 
 {# La date du lot traité : celle donnée par Airflow, sinon le dernier lot de factures #}
