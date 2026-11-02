@@ -1,0 +1,39 @@
+version: 2
+models:
+  - name: fct_factures_optique
+    description: Une ligne par facture, avec les indicateurs F1 à F7.
+    columns:
+      - name: id_demande
+        data_tests: [unique, not_null]
+      - name: f2_statut
+        data_tests:
+          - accepted_values:
+              arguments: {values: ["OUI", "NON", "EN_ATTENTE"]}
+      - name: num_adherent
+        data_tests:
+          - relationships:
+              arguments: {to: ref('slv_adherents'), field: id_adherent}
+              config: {severity: warn}
+  - name: mart_factures_a_controler
+    description: Liste du gestionnaire anti-fraude, avec score, règles, montant à risque et décision.
+    columns:
+      - name: id_demande
+        data_tests: [unique, not_null]
+      - name: decision
+        data_tests:
+          - accepted_values:
+              arguments: {values: ["A_CONTROLER", "EN_ATTENTE", "OK"]}
+  - name: kpi_fraude_quotidien
+    description: KPI par lot. Seule table lisible par ANALYST_ROLE.
+    columns:
+      - name: batch_date
+        data_tests: [unique, not_null]
+
+exposures:
+  - name: dashboard_anti_fraude
+    type: dashboard
+    owner: {name: Clément Badalucco}
+    description: Application Streamlit in Snowflake du gestionnaire anti-fraude.
+    depends_on:
+      - ref('mart_factures_a_controler')
+      - ref('kpi_fraude_quotidien')
