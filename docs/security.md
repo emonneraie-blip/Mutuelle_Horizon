@@ -54,8 +54,8 @@ Leçon du test. Par défaut, Snowflake active **tous** les rôles d'un utilisate
 |---|---|---|
 | Clés privées personnelles (`rsa_key.p8`) | `~/keys/` sur le Mac de chacun | dans Git, dans une image, dans un message |
 | Clés des comptes de service (`svc_ingest.p8`, `svc_transform.p8`) | `~/keys/mutuelle/` sur la machine de démo, montées **en lecture seule** dans les conteneurs | copiées dans une image |
-| Clé `svc_terraform.p8` | Mac d'Eliott, et GitHub Secret `SF_PRIVATE_KEY` pour la CI | dans Git |
-| `.env` (mot de passe Postgres local, webhook Discord, `NIR_SALT`) | `airflow/.env` et `.env` à la racine, ignorés par Git | commités : seuls les `.env.example` le sont |
+| Clé `svc_terraform.p8` | Mac d'Eliott (réservée à un futur `terraform plan` en CI) | dans Git |
+| `.env` (mot de passe Postgres local, webhook Discord, `NIR_SALT`) | `airflow/.env` et `.env` à la racine, ignorés par Git. Dans Airflow, `PGPASSWORD` et `NIR_SALT` passent en `private_environment` : jamais affichés dans l'interface | commités : seuls les `.env.example` le sont |
 | `terraform.tfvars`, `*.tfstate` | Mac d'Eliott, ignorés par Git | commités |
 
 Seules les clés **publiques** circulent. `.gitignore` bloque `*.p8`, `*.pem`, `*.pub`, `.env`, `*.tfvars` et `*.tfstate`. Contrôle avant le rendu : `git log -p | grep -i "private key"` ne renvoie rien.
@@ -63,7 +63,7 @@ Seules les clés **publiques** circulent. `.gitignore` bloque `*.p8`, `*.pem`, `
 ## 5. Données sensibles
 
 - **NIR** : présent en clair seulement dans BRONZE, qui n'est lisible que par `INGEST_ROLE` et `TRANSFORM_ROLE`. Dès SILVER, il est haché avec un sel secret : `SHA2(sel || nir)`. Sans sel, un NIR haché se retrouve facilement, parce que sa structure est connue.
-- **Minimisation** : on ne charge des adhérents que ce que les règles utilisent (identifiant, NIR, formule, dates de contrat, statut, code postal), sans nom, e-mail ni téléphone. Le RPPS est réduit au numéro, à la profession et à la spécialité.
+- **Minimisation** : on ne charge des adhérents que ce que les règles utilisent (identifiant, formule, dates de contrat, statut), sans NIR, nom, e-mail, téléphone ni adresse. Le NIR n'arrive que par les factures et les décomptes NOEMIE. Le RPPS est réduit au numéro, à la profession, à la spécialité et au lieu d'exercice (code postal, commune), sans nom.
 - **Données fictives** : adhérents, NIR et factures sont simulés. Les SIRET et RPPS réels ne servent jamais à désigner un vrai opticien ou un vrai médecin comme fraudeur.
 
 ## 6. Limites connues (et ce qu'on ferait en production)
@@ -75,3 +75,4 @@ Seules les clés **publiques** circulent. `.gitignore` bloque `*.p8`, `*.pem`, `
 | Les humains ont des rôles secondaires actifs par défaut | `ALTER USER … SET DEFAULT_SECONDARY_ROLES = ()` pour tous |
 | Le NIR est en clair dans BRONZE | Hachage dès l'ingestion, ou masquage dynamique Snowflake |
 | Un seul sel pour tout le projet, partagé à la main | Sel dans un coffre à secrets, avec rotation |
+| Le sel est écrit dans le SQL compilé par dbt, donc visible dans l'historique des requêtes de `TRANSFORM_ROLE` | Hachage par une fonction sécurisée (secure UDF) qui lit le sel dans un secret Snowflake |
