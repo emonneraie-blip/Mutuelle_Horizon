@@ -4,6 +4,7 @@ Déploiement : Snowsight > Projects > Streamlit > + Streamlit App, rôle TRANSFO
 base MUTUELLE_FRAUD, schéma GOLD. Coller ce fichier. Snowflake fournit la session : aucun mot de passe ici.
 Lit uniquement GOLD. Les données sont fictives et aucun vrai SIRET n'est affiché en clair.
 """
+import pandas as pd
 import streamlit as st
 from snowflake.snowpark.context import get_active_session
 
@@ -30,13 +31,14 @@ def lire(sql):
 st.set_page_config(page_title="Contrôle anti-fraude", layout="wide")
 st.title("Mutuelle Horizon Santé · factures optique à contrôler")
 
-kpi = lire(f"SELECT * FROM {KPI} ORDER BY batch_date DESC")
+kpi = lire(f"SELECT *, convert_timezone('Europe/Paris', calcule_le)::timestamp_ntz AS calcule_le_paris FROM {KPI} ORDER BY batch_date DESC")
 if kpi.empty:
     st.warning("Aucun lot n'a encore été traité.")
     st.stop()
 
 dernier = kpi.iloc[0]
-st.caption(f"Dernier lot traité : {dernier['batch_date']} · calculé le {dernier['calcule_le']} · données fictives")
+calcule_le = pd.Timestamp(dernier["calcule_le_paris"])
+st.caption(f"Dernier lot traité : {dernier['batch_date']} · calculé le {calcule_le:%d/%m/%Y à %H:%M} (Paris) · données fictives")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Factures du lot", f"{int(dernier['nb_factures']):,}".replace(",", " "))
