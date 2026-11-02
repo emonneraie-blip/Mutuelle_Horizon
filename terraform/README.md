@@ -16,3 +16,49 @@
           printf '%s\n' "${{ secrets.SF_PRIVATE_KEY }}" > "$RUNNER_TEMP/rsa_key.p8"
           echo "TF_VAR_private_key_path=$RUNNER_TEMP/rsa_key.p8" >> "$GITHUB_ENV"
 ```
+
+---
+
+# Terraform · plateforme Snowflake (owner : Eliott)
+
+## Ce que Terraform crée
+
+| Objet | Nom |
+|---|---|
+| Base | `MUTUELLE_FRAUD` |
+| Entrepôts XSMALL, auto-suspend 60 s | `INGEST_WH`, `TRANSFORM_WH`, `BI_WH` |
+| Rôles (rattachés à SYSADMIN) | `INGEST_ROLE`, `TRANSFORM_ROLE`, `ANALYST_ROLE` |
+| Comptes de service (clé RSA seule) | `SVC_INGEST`, `SVC_TRANSFORM` |
+| Accès prof | `REDGRAVE_GRADER` : lecture sur tout ce qui sera créé dans `MUTUELLE_FRAUD` |
+
+Les schémas ne sont pas créés ici : `BRONZE` est créé par `INGEST_ROLE`, `SILVER`/`GOLD`/`OPS` par `TRANSFORM_ROLE`.
+
+## Étapes manuelles (à citer à l'oral)
+
+1. Lucas exécute `bootstrap_admin.sql` (ACCOUNTADMIN, déjà dans le repo), étapes 1 à 3 avant le premier `apply`, puis le bloc 4 après (resource monitor rattaché aux 3 entrepôts).
+2. Clés RSA générées sur chaque machine. Seules les clés publiques circulent.
+3. (Option) Compte HCP Terraform pour le state distant : voir `backend.tf.example`.
+
+## Lancer
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars    # puis remplir
+terraform init
+terraform fmt -check && terraform validate
+terraform plan        # relire : rien ne doit être détruit
+terraform apply
+terraform plan        # doit afficher "No changes" (pas de dérive)
+```
+
+## Arrêt après la note
+
+```bash
+terraform destroy
+```
+
+Puis, dans Snowsight, avec ACCOUNTADMIN : `DROP USER SVC_TERRAFORM;` et `DROP RESOURCE MONITOR MUTUELLE_MONITOR;`.
+
+## Note pour dbt (Clément)
+
+L'accès de la prof passe par des droits « futurs » au niveau de la base. Ne pas ajouter de `GRANT ... ON FUTURE ... IN SCHEMA` dans dbt : un droit futur au niveau d'un schéma remplace celui de la base pour ce schéma, et la prof perdrait l'accès.
