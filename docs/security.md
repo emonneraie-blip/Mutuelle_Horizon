@@ -70,7 +70,7 @@ Seules les clés **publiques** circulent. `.gitignore` bloque `*.p8`, `*.pem`, `
 
 | Limite du prototype | En production |
 |---|---|
-| Le state Terraform est local, sur le Mac d'Eliott | State distant verrouillé (HCP Terraform, bucket versionné) |
+| Le state Terraform est sur HCP Terraform, mais un seul compte HCP (Eliott) y a accès | Équipe HCP avec des droits par personne, et le plan en CI avec un jeton dédié |
 | Airflow tourne en root pour piloter Docker (raccourci de TD) | Tâches sur Kubernetes, rien en root |
 | Les humains ont des rôles secondaires actifs par défaut | `ALTER USER … SET DEFAULT_SECONDARY_ROLES = ()` pour tous |
 | Le NIR est en clair dans BRONZE | Hachage dès l'ingestion, ou masquage dynamique Snowflake |
