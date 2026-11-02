@@ -1,0 +1,11 @@
+version: 2
+sources:
+  - name: bronze
+    schema: BRONZE
+    description: Tables chargées par Lucas (voir docs/contracts.md). Rien n'y est nettoyé.
+    tables:
+      - name: FACTURES_OPTIQUE
+      - name: NOEMIE_DECOMPTES
+      - name: ADHERENTS
+      - name: SIRENE_ETABLISSEMENTS
+      - name: RPPS_PRESCRIPTEURS

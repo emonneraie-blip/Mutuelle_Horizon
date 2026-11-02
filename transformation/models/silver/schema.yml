@@ -1,0 +1,44 @@
+version: 2
+models:
+  - name: slv_factures
+    description: Factures nettoyées et dédoublonnées, NIR haché. Le nettoyage reproduit validate.py.
+    columns:
+      - name: id_demande
+        data_tests: [unique, not_null]          # contrôle de clé
+      - name: canal
+        data_tests:
+          - accepted_values:
+              arguments: {values: ["TIERS_PAYANT", "APP_ADHERENT"]}
+      - name: classe
+        data_tests:
+          - accepted_values:
+              arguments: {values: ["A", "B"]}
+      - name: categorie_verres
+        data_tests:
+          - accepted_values:
+              arguments: {values: ["SIMPLE", "MIXTE", "COMPLEXE", "TRES_COMPLEXE"]}
+  - name: slv_factures_quarantaine
+    description: Factures rejetées, avec leur raison.
+    columns:
+      - name: motif_rejet
+        data_tests: [not_null]
+  - name: slv_noemie
+    columns:
+      - name: id_decompte
+        data_tests: [unique, not_null]
+  - name: slv_adherents
+    columns:
+      - name: id_adherent
+        data_tests: [unique, not_null]
+      - name: formule
+        data_tests:
+          - accepted_values:
+              arguments: {values: ["ESSENTIEL", "CONFORT", "PREMIUM"]}
+  - name: slv_opticiens_sirene
+    columns:
+      - name: siret
+        data_tests: [unique, not_null]
+  - name: slv_prescripteurs_rpps
+    columns:
+      - name: rpps
+        data_tests: [unique, not_null]
