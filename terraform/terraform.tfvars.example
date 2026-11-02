@@ -1,0 +1,9 @@
+# Copier en terraform.tfvars et remplir. terraform.tfvars n'est JAMAIS commité (.gitignore).
+organization_name = "DPNIFMK"
+account_name      = "WG18146"
+user              = "ELIOTT"
+private_key_path  = "~/keys/rsa_key.p8"
+
+# Clés PUBLIQUES envoyées par Lucas (une seule ligne, sans BEGIN/END)
+svc_ingest_public_key    = "MIIBIjANBgkqh..."
+svc_transform_public_key = "MIIBIjANBgkqh..."

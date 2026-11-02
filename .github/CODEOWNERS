@@ -1,11 +1,11 @@
-# Each owner reviews the pull requests that touch their part. Replace CLEMENT_GITHUB_LOGIN with Clément's GitHub login.
+# Each owner reviews the pull requests that touch their part.
 *                       @emonneraie-blip @luxs0000
 /data_generator/        @luxs0000
 /ingestion/             @luxs0000
 /docker-compose.crm.yml @luxs0000
-/docs/contracts.md      @luxs0000 @CLEMENT_GITHUB_LOGIN
-/transformation/        @CLEMENT_GITHUB_LOGIN
-/dashboard/             @CLEMENT_GITHUB_LOGIN
+/docs/contracts.md      @luxs0000 @clementbada
+/transformation/        @clementbada
+/dashboard/             @clementbada
 /airflow/               @emonneraie-blip
 /terraform/             @emonneraie-blip
 /.github/               @emonneraie-blip

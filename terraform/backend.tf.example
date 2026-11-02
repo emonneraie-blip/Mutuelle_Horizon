@@ -1,0 +1,14 @@
+# STATE DISTANT sur HCP Terraform (gratuit, verrouillé, versionné).
+# 1. Créer un compte sur app.terraform.io, une organisation et un workspace "mutuelle-fraud".
+# 2. Dans le workspace : Settings > General > Execution Mode = Local
+#    (le plan tourne sur notre machine, HCP ne garde que le state : la clé .p8 reste chez nous).
+# 3. terraform login, puis renommer ce fichier en backend.tf et lancer : terraform init -migrate-state
+#
+# terraform {
+#   cloud {
+#     organization = "mutuelle-horizon"
+#     workspaces {
+#       name = "mutuelle-fraud"
+#     }
+#   }
+# }
