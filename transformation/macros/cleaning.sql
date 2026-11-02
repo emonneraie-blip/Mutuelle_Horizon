@@ -30,6 +30,9 @@
 
 {# Le sel rend l'empreinte impossible à retrouver en essayant tous les NIR possibles #}
 {% macro hash_nir(col) -%}
+    {%- if execute and not env_var("NIR_SALT") -%}
+        {{ exceptions.raise_compiler_error("NIR_SALT est vide : le NIR serait haché sans sel.") }}
+    {%- endif -%}
     sha2('{{ env_var("NIR_SALT") }}' || {{ clean_digits(col) }}, 256)
 {%- endmacro %}
 

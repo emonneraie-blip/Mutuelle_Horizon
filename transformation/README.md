@@ -30,7 +30,7 @@ dbt docs generate && dbt docs serve              # le graphe de lineage
 3. **F2 :** évaluée 2 jours après la réception, uniquement avec les décomptes déjà reçus. Avant, la facture est `EN_ATTENTE`.
 4. **Pas de quoi conclure n'est pas OK :** une facture sans alerte mais avec F2 en attente n'est pas payable.
 5. **Incident NOEMIE :** `assert_lot_noemie_present` échoue, dbt ne construit pas gold, et le gold de la veille reste en place.
-6. **Vie privée :** NIR haché avec un sel, aucune identité d'adhérent, SIRET masqué dans la liste.
+6. **Vie privée :** NIR haché avec un sel obligatoire et stocké dans aucune vue, aucune identité d'adhérent, SIRET masqué dans la liste.
 
 ## Les corrigés
 

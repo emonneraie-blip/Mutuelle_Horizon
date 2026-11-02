@@ -1,6 +1,7 @@
 -- Toutes les factures, typées et dédoublonnées, avec la raison du rejet s'il y en a une.
 -- slv_factures garde les bonnes lignes, slv_factures_quarantaine les autres : rien n'est perdu.
-{{ config(materialized='view') }}
+-- Ephemeral : aucune vue n'est créée, donc le sel n'est stocké dans aucune définition lisible par la prof.
+{{ config(materialized='ephemeral') }}
 
 with typees as (
     select
