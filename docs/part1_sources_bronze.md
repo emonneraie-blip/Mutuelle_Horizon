@@ -34,9 +34,12 @@ docker-compose.crm.yml   Postgres du CRM (source opérationnelle)
 | `seed_postgres` + requête incrémentale sur un vrai Postgres 16 | OK, rejeu idempotent |
 | Détection du schema drift (nouvelle colonne) | le job s'arrête avant de charger, statut `SCHEMA_DRIFT` |
 | Extraction RPPS sur un fichier au format officiel | OK (filtre ophtalmologie, dédoublonnage, sans les noms) |
-| SQL généré (MERGE adhérents minimisé, reset) | relu, simulé sans Snowflake |
-| SQL Snowflake (PUT / COPY / MERGE / TRUNCATE) | **pas exécuté** : à valider à l'étape 6 |
-| API SIRENE, téléchargement RPPS, `docker build` | **pas testés** hors du Mac (réseau) : étape 1 |
+| `docker build`, API SIRENE (catalogue), téléchargement RPPS — Mac de démo, 02/11 | OK : 400 opticiens actifs, 2,3 M lignes RPPS lues → 8 968 ophtalmologues, sans noms |
+| **Chargement réel sur Snowflake** (`SVC_INGEST` / `INGEST_ROLE` / `INGEST_WH`), 02/11 | `bootstrap_bronze` OK ; historique 2 257 factures + 2 257 décomptes ; CRM 8 000 adhérents puis +20 / jour ; RPPS 8 968 ; jours 26/10 → 03/11 chargés |
+| Contrôles dans BRONZE après chargement | 3 848 lignes de factures / 3 837 `id_demande` (11 renvois techniques), 3 802 décomptes, 8 180 adhérents ; SIRENE : 80 SIRET trouvés et actifs, 3 introuvables (= les faux SIRET F4) ; `LOAD_AUDIT` sans erreur |
+| Incident NOEMIE du 30/10 | `NO_FILE` (avertissement, pas d'échec) le 30/10, puis 318 décomptes le 31/10 (rattrapage) |
+| **Idempotence** (rejeu du 27/10 après le 03/11) | factures et NOEMIE `ALREADY_LOADED` (0 ligne), CRM `MERGE: 0 inserted, 0 updated`, SIRENE 0 appel |
+| `reset_demo` (TRUNCATE + stage + CRM) | SQL relu et simulé, **pas encore exécuté** : à faire avant la première répétition |
 
 ## Pas à pas
 
@@ -83,7 +86,7 @@ Attendu : `Synthetic references used: {'opticiens': False, 'prescripteurs': Fals
 ### 3. CRM Postgres (la source opérationnelle)
 
 ```bash
-docker compose -f docker-compose.crm.yml up -d
+docker compose -f docker-compose.crm.yml up -d --wait     # --wait : attend que Postgres soit prêt (sinon « server closed the connection »)
 run jobs.seed_postgres --date history                   # 8 000 adhérents, joue le rôle de l'application CRM
 ```
 
