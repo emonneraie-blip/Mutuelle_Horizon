@@ -47,7 +47,6 @@ ENV_INGEST = {
     "PGPORT": os.environ.get("PGPORT", "5433"),
     "PGDATABASE": os.environ.get("PGDATABASE", "mutuelle_crm"),
     "PGUSER": os.environ.get("PGUSER", "crm"),
-    "PGPASSWORD": os.environ.get("PGPASSWORD", ""),
     "DATA_DIR": "/data",
     "RUN_ID": "{{ run_id }}",
 }
@@ -59,8 +58,12 @@ ENV_DBT = {
     "SNOWFLAKE_ROLE": "TRANSFORM_ROLE",
     "SNOWFLAKE_WAREHOUSE": "TRANSFORM_WH",
     "SNOWFLAKE_PRIVATE_KEY_FILE": "/secrets/svc_transform.p8",
-    "NIR_SALT": os.environ.get("NIR_SALT", ""),         # sel secret du hachage du NIR (silver), jamais dans Git
 }
+
+
+# Secrets : passés en private_environment, ils ne s'affichent jamais dans l'interface Airflow (ni dans les logs)
+SECRETS_INGEST = {"PGPASSWORD": os.environ.get("PGPASSWORD", "")}
+SECRETS_DBT = {"NIR_SALT": os.environ.get("NIR_SALT", "")}     # sel du hachage du NIR (silver)
 
 
 def alert_discord(context):
@@ -80,7 +83,7 @@ def alert_discord(context):
     urllib.request.urlopen(req, timeout=10)
 
 
-def task(task_id, image, command, env):
+def task(task_id, image, command, env, secrets):
     """Une tâche = un conteneur. En mode DRY_RUN, le conteneur affiche seulement la commande."""
     if DRY_RUN:
         image = "python:3.12.7-slim"
@@ -90,6 +93,7 @@ def task(task_id, image, command, env):
         image=image,
         command=command,
         environment=env,
+        private_environment=secrets,
         mounts=MOUNTS,
         mount_tmp_dir=False,
         auto_remove="success",
@@ -112,12 +116,12 @@ with DAG(
 ) as dag:
 
     # Commandes données par Lucas (docs/part1_sources_bronze.md)
-    crm_activity = task("crm_activity", INGEST_IMAGE, "python -m jobs.seed_postgres --date " + BATCH, ENV_INGEST)
-    ingest_adherents = task("ingest_adherents", INGEST_IMAGE, "python -m jobs.load_adherents_incremental", ENV_INGEST)
-    ingest_factures = task("ingest_factures", INGEST_IMAGE, "python -m jobs.load_invoices --date " + BATCH, ENV_INGEST)
-    ingest_noemie = task("ingest_noemie", INGEST_IMAGE, "python -m jobs.load_noemie --date " + BATCH, ENV_INGEST)
-    check_sirene = task("check_sirene", INGEST_IMAGE, "python -m jobs.fetch_sirene lookup", ENV_INGEST)
-    dbt_build = task("dbt_build", DBT_IMAGE, "dbt build --vars '{batch_date: " + BATCH + "}'", ENV_DBT)
+    crm_activity = task("crm_activity", INGEST_IMAGE, "python -m jobs.seed_postgres --date " + BATCH, ENV_INGEST, SECRETS_INGEST)
+    ingest_adherents = task("ingest_adherents", INGEST_IMAGE, "python -m jobs.load_adherents_incremental", ENV_INGEST, SECRETS_INGEST)
+    ingest_factures = task("ingest_factures", INGEST_IMAGE, "python -m jobs.load_invoices --date " + BATCH, ENV_INGEST, SECRETS_INGEST)
+    ingest_noemie = task("ingest_noemie", INGEST_IMAGE, "python -m jobs.load_noemie --date " + BATCH, ENV_INGEST, SECRETS_INGEST)
+    check_sirene = task("check_sirene", INGEST_IMAGE, "python -m jobs.fetch_sirene lookup", ENV_INGEST, SECRETS_INGEST)
+    dbt_build = task("dbt_build", DBT_IMAGE, "dbt build --vars '{batch_date: " + BATCH + "}'", ENV_DBT, SECRETS_DBT)
 
     crm_activity >> [ingest_adherents, ingest_factures, ingest_noemie]
     ingest_factures >> check_sirene
