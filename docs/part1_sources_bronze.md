@@ -1,66 +1,84 @@
 # Partie 1 · Sources → BRONZE (owner : Lucas)
 
-Ce dossier contient tout le tronçon **sources → bronze** du pipeline « Mutuelle Horizon Santé — détection de fraude optique » :
+Le tronçon **sources → bronze** du pipeline « Mutuelle Horizon Santé — détection de fraude optique » :
 
 ```
-data_generator/   generate.py (données réalistes + fraudes + corrigé)   validate.py (règles de référence, test d'acceptation)
+data_generator/   generate.py (données réalistes + fraudes + corrigés)   validate.py (spécification exécutable)
+                  ref/ (extraits SIRENE / RPPS réels figés, sans noms)
 ingestion/        jobs Python (1 job = 1 source), sql/bronze_ddl.sql, Dockerfile, requirements.txt figé
 docs/             contracts.md (contrat bronze ↔ silver, règles de fraude), ce runbook
 docker-compose.crm.yml   Postgres du CRM (source opérationnelle)
 .env.example      variables à copier dans .env (jamais commité)
 ```
 
-## Ce qui a déjà été testé (et ce qui ne l'a pas été)
+## Décisions de l'équipe (review du 02/11)
+
+| Sujet | Décision |
+|---|---|
+| F2 « sans décompte NOEMIE » | évaluée seulement quand `date_reception <= batch_date - 2 jours` (donc le matin de J+3, quand tourne le lot J+2), avec les fichiers NOEMIE reçus jusqu'à `batch_date`. Avant : statut **EN_ATTENTE**. Avec 1 jour de grâce, `validate.py` mesure 23 faux positifs le matin de l'incident du 30/10 ; avec 2 jours, 0 |
+| Données personnelles | `BRONZE.ADHERENTS` = identifiant, formule, dates de contrat, statut, `UPDATED_AT`. Ni NIR, ni nom, prénom, naissance, e-mail, téléphone, code postal, ville (restent dans le CRM source). Le seul NIR dans Snowflake est celui de la facture (F2) |
+| Opticiens réels | vrai SIRET (vérifié par la vraie API SIRENE), **nom toujours fictif** |
+| Références | extraits SIRENE / RPPS figés dans `data_generator/ref/` : même seed = mêmes fichiers sur toutes les machines |
+| Jeu officiel | `--seed 42`, incident NOEMIE du 30/10 inclus par défaut, ≥ 5 fraudes par règle, une F5 le 04/11, 1 facture invalide par jour (quarantaine) |
+| Démo | préchargement jusqu'au **03/11 inclus** ; jeudi 5, « Trigger » → le run traite le **04/11** |
+| Ordre de chargement | d'abord `run_day` jusqu'au 03/11 (Clément développe dbt dessus) ; quand le DAG et dbt sont prêts : `reset_demo` (SIRENE / RPPS conservés) puis backfill Airflow |
+| Remise à zéro | `jobs.reset_demo` : `TRUNCATE` (efface aussi la mémoire de chargement de COPY, contrairement à `DELETE`) |
+
+## Ce qui a été testé (et ce qui ne l'a pas été)
 
 | Testé | Résultat |
 |---|---|
-| Générateur, 5 seeds, mess `high`, incident NOEMIE en retard | `validate.py` : 100 % de rappel sur les 7 règles, 0 faux positif |
-| Reproductibilité | même seed → fichiers identiques au bit près |
+| Générateur + `validate.py --each-day`, seeds 1, 7, 42, 123, 2026, mess `medium` et `high` | chaque matin : 100 % de rappel sur les règles évaluables, 0 faux positif, quarantaine exacte ; ≥ 5 fraudes par règle, F5 le dernier jour |
+| Délai de grâce F2 (seed 42) | 0 jour : faux positifs tous les matins · 1 jour : 23 le 30/10 · **2 jours : 0** |
+| Reproductibilité | même seed + mêmes références → fichiers identiques au bit près |
 | `seed_postgres` + requête incrémentale sur un vrai Postgres 16 | OK, rejeu idempotent |
 | Détection du schema drift (nouvelle colonne) | le job s'arrête avant de charger, statut `SCHEMA_DRIFT` |
 | Extraction RPPS sur un fichier au format officiel | OK (filtre ophtalmologie, dédoublonnage, sans les noms) |
-| Dépendances figées (`requirements.txt`) | résolues et importées en Python 3.12 |
-| SQL Snowflake (PUT / COPY / MERGE) | généré et relu, **pas exécuté** : à valider à l'étape 6 ci-dessous |
-| API SIRENE, téléchargement RPPS, `docker build` | **pas testés ici** (réseau bloqué) : à lancer depuis le Mac |
+| SQL généré (MERGE adhérents minimisé, reset) | relu, simulé sans Snowflake |
+| SQL Snowflake (PUT / COPY / MERGE / TRUNCATE) | **pas exécuté** : à valider à l'étape 6 |
+| API SIRENE, téléchargement RPPS, `docker build` | **pas testés** hors du Mac (réseau) : étape 1 |
 
 ## Pas à pas
 
-Toutes les commandes se lancent à la racine du repo.
+Toutes les commandes se lancent à la racine du repo, sur la machine de démo (Mac de Lucas).
 
 ### 0. Prérequis (une fois)
 
-Owner : **Lucas**. Prérequis : `terraform/bootstrap_admin.sql` exécuté, puis le Terraform d'Eliott appliqué (base, `INGEST_WH`, `INGEST_ROLE`, `TRANSFORM_ROLE`, compte `SVC_INGEST`).
-
 ```bash
-# clé du compte de service SVC_INGEST, sur la machine de démo — la clé privée ne quitte jamais ~/keys/mutuelle
-mkdir -p ~/keys/mutuelle && openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out ~/keys/mutuelle/svc_ingest.p8 -nocrypt
-openssl rsa -in ~/keys/mutuelle/svc_ingest.p8 -pubout -out ~/keys/mutuelle/svc_ingest.pub
-cat ~/keys/mutuelle/svc_ingest.pub   # clé PUBLIQUE à donner à Eliott (variable Terraform)
+# clés des comptes de service, sur la machine de démo — les clés privées ne quittent jamais ~/keys/mutuelle
+mkdir -p ~/keys/mutuelle
+for k in svc_ingest svc_transform; do
+  openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out ~/keys/mutuelle/$k.p8 -nocrypt
+  openssl rsa -in ~/keys/mutuelle/$k.p8 -pubout -out ~/keys/mutuelle/$k.pub
+done
+cat ~/keys/mutuelle/*.pub            # clés PUBLIQUES à donner à Eliott (variables Terraform)
 cp .env.example .env                 # SNOWFLAKE_USER=SVC_INGEST, SNOWFLAKE_PRIVATE_KEY_FILE=/secrets/svc_ingest.p8
 docker build -t fraud-ingest:1.0.0 ingestion/
 ```
 
-Raccourci pour lancer un job dans le conteneur (même montage que dans le DAG Airflow) :
+Raccourci pour lancer un job dans le conteneur (mêmes montages que dans le DAG Airflow) — à recoller dans chaque nouveau terminal :
 
 ```bash
 run() { docker run --rm --env-file .env -v "$PWD/data:/data" -v "$HOME/keys/mutuelle:/secrets:ro" fraud-ingest:1.0.0 python -m "$@"; }
 ```
 
-### 1. Références réelles (internet, pas besoin de Snowflake)
+### 1. Figer les références réelles (UNE seule fois, internet, pas besoin de Snowflake)
 
 ```bash
-run jobs.fetch_sirene catalogue --departements 75 92 93 94 --max 400   # vrais opticiens actifs -> data/ref/opticiens_sirene.csv
-run jobs.load_rpps --extract-only                                     # ~800 Mo lus en streaming -> data/ref/ophtalmos_rpps.csv
+run jobs.fetch_sirene catalogue --departements 75 92 93 94 --max 400   # vrais opticiens actifs, sans nom
+run jobs.load_rpps --extract-only                                     # ~800 Mo lus en streaming, ophtalmos, sans nom
+mkdir -p data_generator/ref && cp data/ref/opticiens_sirene.csv data/ref/ophtalmos_rpps.csv data_generator/ref/
+git add data_generator/ref                                            # versionnés : plus besoin de les refaire
 ```
 
-### 2. Générer les données (seed fixe = démo reproductible)
+### 2. Générer et valider le jeu officiel
 
 ```bash
-python3 data_generator/generate.py --seed 42            # 10 jours à partir du 2026-10-26 + 24 mois d'historique
-python3 data_generator/validate.py --data data          # attendu : VALIDATION OK
+python3 data_generator/generate.py --seed 42             # 10 jours du 26/10 au 04/11 + 24 mois d'historique + incident du 30/10
+python3 data_generator/validate.py --data data --each-day
 ```
 
-La dernière ligne de `generate.py` doit indiquer `Synthetic references used: {'opticiens': False, 'prescripteurs': False}` (= les vraies références de l'étape 1 sont utilisées).
+Attendu : `Synthetic references used: {'opticiens': False, 'prescripteurs': False}` puis `VALIDATION OK`. `generate.py` refuse de tourner sans les références figées (sauf `--allow-synthetic`, réservé à la CI). `validate.py` affiche aussi l'`id_demande` de la F5 du 04/11 à ouvrir pendant la démo.
 
 ### 3. CRM Postgres (la source opérationnelle)
 
@@ -69,7 +87,7 @@ docker compose -f docker-compose.crm.yml up -d
 run jobs.seed_postgres --date history                   # 8 000 adhérents, joue le rôle de l'application CRM
 ```
 
-### 4. Créer la couche bronze
+### 4. Créer la couche bronze (après le Terraform d'Eliott)
 
 ```bash
 run jobs.bootstrap_bronze
@@ -81,45 +99,62 @@ run jobs.bootstrap_bronze
 run jobs.load_invoices --date history
 run jobs.load_noemie --date history
 run jobs.load_adherents_incremental       # 1er run = chargement complet (watermark 1900-01-01)
-run jobs.load_rpps --reuse-extract
+run jobs.load_rpps --reuse-extract        # charge l'extrait figé (le même que celui du générateur)
 ```
 
-### 6. Charger les jours, comme le fera Airflow
+### 6. Charger les jours jusqu'au 03/11 inclus
+
+**Maintenant**, à la main avec `run_day`, pour que Clément puisse développer dbt sur BRONZE :
 
 ```bash
-for d in 2026-10-26 2026-10-27 2026-10-28; do run jobs.run_day --date $d --simulate-crm; done
+for d in 2026-10-26 2026-10-27 2026-10-28 2026-10-29 2026-10-30 2026-10-31 2026-11-01 2026-11-02 2026-11-03; do
+  run jobs.run_day --date $d --simulate-crm
+done
 ```
 
-`run_day` enchaîne : activité CRM du jour → incrémental adhérents → factures → NOEMIE → vérification SIRENE des nouveaux SIRET.
+Le 04/11 n'est **pas** chargé : c'est le run live de jeudi. **Plus tard**, quand le DAG et dbt sont prêts : `reset_demo --yes` (SIRENE / RPPS conservés, pas besoin de l'API), puis rechargement par le **backfill Airflow** d'Eliott (dates logiques du 27/10 au 04/11 : chaque run traite la veille), pour garder dans l'historique Airflow le run rouge du 30/10 puis le vert du 31/10. `run_day` enchaîne : activité CRM du jour → incrémental adhérents → factures → NOEMIE → vérification SIRENE des nouveaux SIRET.
 
 Vérifications dans Snowsight :
 
 ```sql
 SELECT JOB, BATCH_DATE, STATUS, FILES_LOADED, ROWS_LOADED, ENDED_AT FROM MUTUELLE_FRAUD.BRONZE.LOAD_AUDIT ORDER BY ENDED_AT DESC;
 SELECT _BATCH_DATE, COUNT(*), COUNT(DISTINCT ID_DEMANDE) FROM MUTUELLE_FRAUD.BRONZE.FACTURES_OPTIQUE GROUP BY 1 ORDER BY 1;
-SELECT FOUND, COUNT(*) FROM MUTUELLE_FRAUD.BRONZE.SIRENE_ETABLISSEMENTS GROUP BY 1;
+SELECT FOUND, COUNT(*) FROM MUTUELLE_FRAUD.BRONZE.SIRENE_ETABLISSEMENTS GROUP BY 1;   -- FALSE = uniquement les faux SIRET (F4)
 ```
 
-**Preuve d'idempotence** (à montrer à l'oral) : relancer `run jobs.run_day --date 2026-10-27` donne `ALREADY_LOADED`, `0 rows`, et `MERGE: 0 inserted, 0 updated`.
+**Preuve d'idempotence** (à montrer à l'oral) : relancer `run jobs.run_day --date 2026-10-27 --simulate-crm` donne `ALREADY_LOADED`, `0 rows`, et `MERGE: 0 inserted, 0 updated`.
 
-### 7. Les deux incidents (pour C6)
+### 7. Les incidents (C6)
 
-1. **Flux NOEMIE en retard** : `python3 data_generator/generate.py --seed 42 --late-noemie-date 2026-10-30` ; le job NOEMIE de ce jour enregistre `NO_FILE`, et c'est le test de fraîcheur dbt qui alerte.
-2. **Schema drift** : `--schema-drift-from 2026-10-31` ajoute une colonne aux factures ; `load_invoices` s'arrête avec `SCHEMA_DRIFT` **avant** de charger, Airflow alerte. Correction : mise à jour du contrat + DDL + PR relue.
+1. **Rejeu sans doublon** : relancer `ingest_factures` (ou tout le run d'un jour) → `COPY` charge 0 ligne, le `MERGE` ne change rien, le gold est identique.
+2. **NOEMIE en retard** (inclus dans le jeu officiel) : le 30/10, pas de fichier NOEMIE → `load_noemie` enregistre `NO_FILE`, le test de complétude dbt échoue, le gold n'est pas publié, alerte Discord. Le 31/10, le fichier arrive avec les décomptes des deux jours → tout repasse au vert. Grâce au délai de 2 jours, aucune facture n'est marquée F2 à tort.
+3. Bonus si on nous le demande : **schema drift** (`--schema-drift-from 2026-10-31` sur un jeu de test) → `load_invoices` s'arrête avec `SCHEMA_DRIFT` avant de charger.
+
+### 8. Remise à zéro (répétitions, vidéo)
+
+```bash
+run jobs.reset_demo --yes          # TRUNCATE BRONZE (+ mémoire de chargement COPY), vide le stage, supprime la table CRM
+```
+
+Puis étapes 3, 5, 6, et `dbt build --full-refresh` côté transformation. Les tables SIRENE / RPPS sont conservées (ajouter `--with-references` pour les vider aussi).
 
 ## Commandes à donner au DAG Airflow (owner plateforme)
 
+Dans le DAG, chaque run traite **la veille** : `B = {{ macros.ds_add(ds, -1) }}`.
+
 | Tâche | Commande dans l'image `fraud-ingest:1.0.0` |
 |---|---|
-| `crm_activity` (simulation, démo uniquement) | `python -m jobs.seed_postgres --date {{ ds }}` |
+| `crm_activity` (simulation, démo uniquement) | `python -m jobs.seed_postgres --date B` |
 | `ingest_adherents` | `python -m jobs.load_adherents_incremental` |
-| `ingest_factures` | `python -m jobs.load_invoices --date {{ ds }}` |
-| `ingest_noemie` | `python -m jobs.load_noemie --date {{ ds }}` |
+| `ingest_factures` | `python -m jobs.load_invoices --date B` |
+| `ingest_noemie` | `python -m jobs.load_noemie --date B` |
 | `check_sirene` (après `ingest_factures`) | `python -m jobs.fetch_sirene lookup` |
-| `refresh_rpps` (hebdomadaire) | `python -m jobs.load_rpps` |
+| `refresh_rpps` (hebdomadaire ; démo : `--reuse-extract`, l'extrait figé) | `python -m jobs.load_rpps --reuse-extract` |
 
-Montages : `./data → /data`, `~/keys/mutuelle → /secrets` (lecture seule). Compte : `SVC_INGEST`. Variables : celles de `.env.example`. Dans le DAG, `{{ ds }}` devient `{{ macros.ds_add(ds, -1) }}` (on traite le lot de la veille).
+Montages : `./data → /data`, `~/keys/mutuelle → /secrets` (lecture seule). Compte : `SVC_INGEST`. Variables : celles de `.env.example`.
 
 ## Ce que l'owner de la transformation reçoit
 
-Les tables `BRONZE.*` décrites dans `docs/contracts.md`, le corrigé `data/answer_key/fraud_answer_key.csv`, et `data_generator/validate.py`, qui est la spécification exécutable du nettoyage et des 7 règles.
+- les tables `BRONZE.*` décrites dans `docs/contracts.md` ;
+- `data/answer_key/fraud_answer_key.csv` (seed dbt du test d'acceptation) et `data/answer_key/quarantine_key.csv` (test de la quarantaine) — déterministes, donc commitables dans `transformation/seeds/` ;
+- `data_generator/validate.py`, la spécification exécutable du nettoyage, de la quarantaine, du délai F2 et des 7 règles (`--as-of` pour reproduire un matin donné).

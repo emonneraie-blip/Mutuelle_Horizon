@@ -22,8 +22,10 @@ from .common import RUN_ID, audit, copy_result, get_logger, now, postgres_conn, 
 
 log = get_logger("load_adherents_incremental")
 
-COLUMNS = ["ID_ADHERENT", "NIR", "NOM", "PRENOM", "DATE_NAISSANCE", "EMAIL", "TELEPHONE", "CODE_POSTAL", "VILLE",
-           "FORMULE", "DATE_DEBUT_CONTRAT", "DATE_FIN_CONTRAT", "STATUT", "UPDATED_AT"]
+# Data minimisation (GDPR): only the columns the fraud rules need leave the CRM (F3 uses FORMULE, F7 uses
+# DATE_FIN_CONTRAT). NIR, name, first name, birth date, e-mail, phone, postcode and city stay in the operational
+# database and are never copied to Snowflake (the NIR used by F2 comes from the claim itself).
+COLUMNS = ["ID_ADHERENT", "FORMULE", "DATE_DEBUT_CONTRAT", "DATE_FIN_CONTRAT", "STATUT", "UPDATED_AT"]
 
 MERGE = f"""
 MERGE INTO BRONZE.ADHERENTS t

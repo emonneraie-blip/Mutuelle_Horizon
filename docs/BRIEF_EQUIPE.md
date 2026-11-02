@@ -43,7 +43,7 @@ La grille de l'oral (/80) est la suivante :
 | Décision | bloquer et contrôler la facture, ou la payer |
 | Grain de la métrique | une ligne par facture (`id_demande`) |
 | Score | nombre de règles de fraude déclenchées (0 à 7), plus la liste des règles et le montant à risque |
-| Fréquence | **batch quotidien** à 06:00 Europe/Paris. La mutuelle paie à J+1/J+2, donc le streaming serait inutile |
+| Fréquence | **batch quotidien** à 06:00 Europe/Paris. La mutuelle paie après contrôle : dès J+1 pour les 6 règles immédiates, à partir de J+3 pour F2 (le lot J+2 tourne le matin de J+3). Le streaming serait inutile |
 | Test d'acceptation | sur nos données de test, **au moins 80 % des fraudes injectées** sont dans la liste à contrôler, et **0 faux positif** |
 
 **Les 7 règles de fraude**
@@ -51,7 +51,7 @@ La grille de l'oral (/80) est la suivante :
 | Code | Règle |
 |---|---|
 | F1 | Renouvellement d'équipement en moins de 2 ans (730 jours), même adhérent |
-| F2 | Facture sans décompte de la Sécurité sociale (NOEMIE) correspondant (même NIR, SIRET et date de soins), avec 1 jour de tolérance |
+| F2 | Facture sans décompte de la Sécurité sociale (NOEMIE) correspondant (même NIR, SIRET et date de soins). **Évaluée seulement 2 jours après la réception** (un décompte peut arriver jusqu'à J+2, donc la décision tombe le matin de J+3, quand tourne le lot J+2) ; avant, F2 est « EN_ATTENTE » et le paiement attend |
 | F3 | Classe B et part mutuelle demandée > min(plafond du contrat responsable, garantie de la formule) |
 | F4 | SIRET de l'opticien inconnu ou fermé dans SIRENE (opticien fantôme) |
 | F5 | Même numéro de facture du même opticien déjà remboursé à un **autre** adhérent |
@@ -106,7 +106,9 @@ Les données de référence pour ces règles :
 | Schémas nettoyé / métier | `SILVER`, `GOLD`, plus `OPS` pour les logs dbt | rôle `TRANSFORM_ROLE`, dbt (Clément) |
 | Entrepôts (XSMALL, auto-suspend 60 s) | `INGEST_WH`, `TRANSFORM_WH`, `BI_WH` | Terraform |
 | Rôles | `INGEST_ROLE` (écrit BRONZE) · `TRANSFORM_ROLE` (lit BRONZE, écrit SILVER/GOLD/OPS) · `ANALYST_ROLE` (lit uniquement les KPI agrégés) | Terraform |
-| Accès de la prof | rôle `REDGRAVE_GRADER` (existe déjà depuis le TD ingestion) : lecture sur `MUTUELLE_FRAUD` | Terraform |
+| Accès de la prof | rôle `REDGRAVE_GRADER` (existe déjà depuis le TD ingestion) : lecture sur `SILVER`, `GOLD`, `OPS` — **pas sur BRONZE** (NIR en clair) | Terraform |
+
+`ANALYST_ROLE` = la direction : uniquement les KPI agrégés (c'est la démo « accès refusé »). Le dashboard du gestionnaire est une app Streamlit **possédée par `TRANSFORM_ROLE`** avec USAGE sur `BI_WH` : elle tourne avec les droits de son propriétaire.
 
 Principe : **chaque rôle possède sa couche**. Le rôle propriétaire d'une couche donne la lecture à la couche suivante : BRONZE donne la lecture à `TRANSFORM_ROLE`, et GOLD donne la lecture des KPI à `ANALYST_ROLE`.
 
@@ -177,12 +179,12 @@ Mutuelle_Horizon/
 
 ### Étape 1 · Lucas · Sources → BRONZE (le code est déjà écrit et testé : `data_generator/`, `ingestion/`)
 
-1. Pousser le squelette du repo et le code de la partie 1 (première PR).
-2. Récupérer les références réelles : `fetch_sirene catalogue` (opticiens actifs de Paris et petite couronne) et `load_rpps --extract-only` (ophtalmologues).
-3. Générer les données : `generate.py --seed 42`, puis `validate.py` doit afficher `VALIDATION OK`. Copier `data/answer_key/fraud_answer_key.csv` vers Clément (seed dbt).
+1. ✅ Squelette du repo et code de la partie 1 sur `main`. PR `fix/part1-review` : corrections de la review du 02/11 (délai F2, minimisation, noms fictifs, quarantaine, quotas, reset).
+2. Figer les références réelles **une seule fois** : `fetch_sirene catalogue` (opticiens actifs de Paris et petite couronne) et `load_rpps --extract-only` (ophtalmologues), copiées sans noms dans `data_generator/ref/` et versionnées.
+3. Générer le **jeu officiel** : `generate.py --seed 42` (incident NOEMIE du 30/10 inclus), puis `validate.py --each-day` → `VALIDATION OK`. Les corrigés `fraud_answer_key.csv` et `quarantine_key.csv` vont dans les seeds dbt de Clément.
 4. Construire l'image `fraud-ingest:1.0.0`, lancer le CRM Postgres (`docker-compose.crm.yml`), faire `seed_postgres --date history`.
-5. **Après le Terraform d'Eliott** : `bootstrap_bronze`, puis charger l'historique et les références, puis les jours du 26/10 au 03/11 avec `run_day`.
-6. Prouver l'idempotence : relancer un jour donne `ALREADY_LOADED` et `MERGE 0/0`.
+5. **Après le Terraform d'Eliott** : `bootstrap_bronze`, puis charger l'historique et les références, puis les jours **jusqu'au 03/11 inclus** avec `run_day`, tout de suite, pour que Clément développe dbt. Le 04/11 est réservé au run live. Quand le DAG et dbt sont prêts : `reset_demo` (garde SIRENE / RPPS) puis rechargement par le backfill Airflow.
+6. Prouver l'idempotence : relancer un jour donne `ALREADY_LOADED` et `MERGE 0/0`. Livrer `jobs.reset_demo` (remise à zéro par `TRUNCATE`) pour les répétitions.
 
 **C'est fini quand** : les 6 tables BRONZE sont remplies, `LOAD_AUDIT` est propre, et Eliott a la liste des commandes Docker pour le DAG (voir `docs/part1_sources_bronze.md`).
 
@@ -193,10 +195,10 @@ Projet dbt `mutuelle_dbt`, sur la même base que le TD dbt (profiles.yml avec va
 | Couche | Modèle | Rôle |
 |---|---|---|
 | silver | `slv_factures` | typage (3 formats de date, montants « 1 234,50 € », codes en majuscules, identifiants sans espaces), **dédoublonnage** des renvois techniques sur `id_demande`, `nir_hash = SHA2(nir)` |
-| silver | `slv_factures_quarantaine` | lignes inexploitables, avec la raison du rejet |
+| silver | `slv_factures_quarantaine` | lignes inexploitables (date impossible, montant négatif ou manquant), avec la raison. Exclues des règles **et** de l'historique F1/F5. Liste attendue : seed `quarantine_key` |
 | silver | `slv_noemie` | aplatissement du VARIANT |
-| silver | `slv_adherents`, `slv_opticiens_sirene`, `slv_prescripteurs_rpps` | référentiels nettoyés |
-| gold | `fct_factures_optique` | une ligne par facture, avec les **7 indicateurs F1 à F7** |
+| silver | `slv_adherents`, `slv_opticiens_sirene`, `slv_prescripteurs_rpps` | référentiels nettoyés (`ADHERENTS` est minimisée : identifiant, formule, dates de contrat, statut ; ni NIR ni coordonnées) |
+| gold | `fct_factures_optique` | une ligne par facture, avec les **7 indicateurs F1 à F7** ; F2 seulement si `date_reception <= batch_date - 2`, sinon `f2_statut = 'EN_ATTENTE'` |
 | gold | `mart_factures_a_controler` | score, liste des règles, montant à risque, décision `A_CONTROLER` / `OK` |
 | gold | `kpi_fraude_quotidien` | par jour : nombre de factures, nombre de suspectes, montant bloqué. **Seule table visible par `ANALYST_ROLE`** |
 
@@ -204,9 +206,9 @@ Projet dbt `mutuelle_dbt`, sur la même base que le TD dbt (profiles.yml avec va
 - **clé** : `unique` et `not_null` sur `id_demande` ;
 - **règle métier** : `accepted_values` sur canal, classe et catégorie, plus un test singulier « montant ≥ 0 » ;
 - **complétude** : le lot NOEMIE du `batch_date` est bien présent. C'est ce test qui déclenche l'incident 2 ;
-- **test d'acceptation** : seed `fraud_answer_key` + test singulier `assert_recall_80pct`.
+- **test d'acceptation** : seed `fraud_answer_key` + test singulier `assert_recall_80pct` (hors F2 encore en attente), 0 faux positif ; seed `quarantine_key` pour la quarantaine.
 
-La **spécification exécutable** de chaque règle et de chaque nettoyage est dans `data_generator/validate.py` : il faut reproduire exactement ses résultats en SQL.
+La **spécification exécutable** de chaque règle, de chaque nettoyage, de la quarantaine et du délai F2 est dans `data_generator/validate.py` : il faut reproduire exactement ses résultats en SQL. `validate.py --as-of AAAA-MM-JJ` donne le résultat attendu pour un matin donné.
 
 **Image `fraud-dbt:1.0.0`, avec le projet dbt COPIÉ dans l'image.** C'était le bug de l'image fournie au TD Airflow. Versions figées : dbt-core 1.11.x et dbt-snowflake 1.11.x, comme au TD.
 
@@ -215,13 +217,13 @@ La **spécification exécutable** de chaque règle et de chaque nettoyage est da
 - les KPI du jour ;
 - la date de fraîcheur des données.
 
-**C'est fini quand** : `dbt build` est vert, le rappel est d'au moins 80 % avec 0 faux positif, et le dashboard affiche le 03/11.
+**C'est fini quand** : `dbt build` est vert, le rappel est d'au moins 80 % avec 0 faux positif, et le dashboard affiche le 03/11 (puis le 04/11 après le run live).
 
 ### Étape 3 · Eliott · Plateforme (`terraform/`, `airflow/`, `.github/`, docs sécurité / FinOps / incidents)
 
 1. **Aujourd'hui, en priorité, parce que tout le monde en dépend :**
    - Lucas exécute `terraform/bootstrap_admin.sql`, l'étape manuelle : utilisateurs `ELIOTT`, `CLEMENT`, `SVC_TERRAFORM` et le resource monitor ;
-   - Eliott fait le **Terraform**, en reprenant le TD (module warehouse) : base, 3 entrepôts, 3 rôles, 2 comptes de service (`snowflake_service_user`, avec les clés publiques de Lucas), grants (usage, `CREATE SCHEMA` pour INGEST et TRANSFORM, rôles rattachés à SYSADMIN), et lecture pour `REDGRAVE_GRADER` ;
+   - Eliott fait le **Terraform**, en reprenant le TD (module warehouse) : base, 3 entrepôts, 3 rôles, 2 comptes de service (`snowflake_service_user`, avec les clés publiques de Lucas), grants (usage, `CREATE SCHEMA` pour INGEST et TRANSFORM, rôles rattachés à SYSADMIN), et lecture pour `REDGRAVE_GRADER` sur SILVER / GOLD / OPS seulement (aucun rôle hors INGEST / TRANSFORM ne lit BRONZE) ;
    - **state distant sur HCP Terraform** (gratuit, verrouillé).
 2. **CI** `ci.yml` sur chaque PR : `terraform fmt -check`, `validate`, `plan`. ⚠️ Reprendre le workflow **corrigé** du TD : la clé est écrite dans l'étape, via `$GITHUB_ENV`, et pas dans le bloc `env:` du job. Plus un job Python qui lance `generate.py` puis `validate.py`.
 3. **DAG Airflow `mutuelle_fraud_daily`** (copie adaptée du TD) :
@@ -229,7 +231,9 @@ La **spécification exécutable** de chaque règle et de chaque nettoyage est da
    - chaque tâche est un `DockerOperator` qui traite **le lot de la veille** (`{{ macros.ds_add(ds, -1) }}`) :
      `crm_activity` → `ingest_adherents` + `ingest_factures` + `ingest_noemie` (en parallèle) → `check_sirene` → `dbt_build` (`dbt build --vars '{batch_date: …}'`) ;
    - montages : `./data` → `/data`, `~/keys/mutuelle` → `/secrets` (lecture seule) ;
-   - comptes : `SVC_INGEST` pour l'ingestion, `SVC_TRANSFORM` pour dbt.
+   - comptes : `SVC_INGEST` pour l'ingestion, `SVC_TRANSFORM` pour dbt ;
+   - préchargement par **backfill** (dates logiques du 27/10 au 04/11 = lots du 26/10 au 03/11) : l'historique Airflow garde le run rouge du 30/10 et le vert du 31/10 ;
+   - script de démo : `jobs.reset_demo --yes` puis rechargement, pour les répétitions et la vidéo.
 4. **Sécurité (C7)** : la démo « accès refusé » (`USE ROLE ANALYST_ROLE; SELECT * FROM GOLD.MART_FACTURES_A_CONTROLER;` → erreur, alors que `KPI_FRAUDE_QUOTIDIEN` passe) et `docs/security.md`.
 5. **FinOps (C7)** :
    - coût réel du prototype : `ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY`, par entrepôt ;
@@ -238,7 +242,7 @@ La **spécification exécutable** de chaque règle et de chaque nettoyage est da
    - procédure d'arrêt et de nettoyage (`terraform destroy` après la note).
 6. **Les 2 incidents, testés et documentés** dans `docs/incidents.md` :
    - **incident 1, rejeu sans doublon** : la tâche `ingest_factures` est relancée après un retry, `COPY` charge 0 ligne, et le gold ne change pas ;
-   - **incident 2, NOEMIE en retard** : données générées avec `--late-noemie-date`, le test de complétude échoue, le gold n'est pas publié, l'alerte Discord part. On relance une fois le fichier arrivé, et tout repasse au vert.
+   - **incident 2, NOEMIE en retard** : inclus dans le jeu officiel (30/10, défaut de `generate.py`), le test de complétude échoue, le gold n'est pas publié, l'alerte Discord part. On relance une fois le fichier arrivé, et tout repasse au vert.
 
 **C'est fini quand** : le DAG tourne seul de bout en bout sur la machine de démo, et les 2 incidents ont été rejoués.
 
@@ -260,11 +264,11 @@ La **spécification exécutable** de chaque règle et de chaque nettoyage est da
 
 ## 8. La démo live (environ 3 min dans les 10 min)
 
-Préparation la veille : la base est chargée jusqu'au 02/11, Airflow est démarré, le dashboard est ouvert.
+Préparation la veille : la base est chargée jusqu'au **03/11 inclus**, Airflow est démarré, le dashboard est ouvert.
 
-1. **Airflow** : déclencher le run qui traite le 03/11, puis montrer le graphe (ingestion en parallèle → SIRENE → dbt) qui passe au vert (Eliott).
+1. **Airflow** : cliquer sur « Trigger » (le run du 5/11 traite le lot du **04/11**, sans date à taper), puis montrer le graphe (ingestion en parallèle → SIRENE → dbt) qui passe au vert (Eliott).
 2. **Snowsight** : `LOAD_AUDIT` du jour, puis relancer `ingest_factures` → `ALREADY_LOADED`. C'est l'idempotence (Lucas).
-3. **Dashboard** : les factures du 03/11 à contrôler, avec les règles déclenchées. Ouvrir une facture F5 (« facture réutilisée ») et l'expliquer (Clément).
+3. **Dashboard** : les factures du 04/11 à contrôler, avec les règles déclenchées. Ouvrir **la F5 du 04/11** (« facture réutilisée », son `id_demande` est affiché par `validate.py`) et l'expliquer (Clément). Les F2 du jour sont « en attente » : c'est normal, et ça se défend (décision F2 et paiement à J+3).
 4. **Accès refusé** avec `ANALYST_ROLE` (Eliott).
 
 **Plan B** : si le réseau ou le wifi tombe, on passe la **vidéo** enregistrée mercredi.

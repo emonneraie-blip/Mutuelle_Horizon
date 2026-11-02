@@ -14,25 +14,33 @@ Outputs (default --out data):
   data/raw/dt=YYYY-MM-DD/noemie/noemie_YYYYMMDD.jsonl            NOEMIE statements received that day
   data/raw/dt=YYYY-MM-DD/crm/adherents_changes.csv               CRM inserts/updates of that day
   data/answer_key/fraud_answer_key.csv                         one line per injected fraud
+  data/answer_key/quarantine_key.csv                           legit claims made unusable on purpose (silver quarantine)
   data/answer_key/noise_report.json                            every kind of mess injected, with counts
   data/answer_key/generation_manifest.json                     parameters + seed (put it in the README)
+  data/ref/                                                    copy of the reference files used (for load_rpps --reuse-extract)
 
-Reference data (optional but recommended): real opticians from the SIRENE API and real
-ophthalmologists from the RPPS directory, produced by the ingestion jobs
-(`fetch_sirene catalogue`, `load_rpps --extract-only`) into data/ref/. Without them the
-generator falls back to synthetic SIRET/RPPS numbers (fine for tests, but the SIRENE and
-RPPS rules then lose their meaning).
+Reference data (required): real opticians from the SIRENE API and real ophthalmologists from the
+RPPS directory, FROZEN in data_generator/ref/ (no names) so that the same seed gives the same files on
+every machine. They are produced once by the ingestion jobs (`fetch_sirene catalogue`,
+`load_rpps --extract-only`). Without them the generator stops, unless --allow-synthetic (CI only:
+synthetic SIRET/RPPS numbers, the SIRENE rule is then meaningless against the real API).
+
+Guarantees (checked again by validate.py): at least --min-per-rule frauds for each rule F1..F7 (F2 counted
+outside the grace period), at least one F5 on the last day (opened during the live demo), and one
+invalid legit claim per day (negative amount or impossible date) for the silver quarantine.
 
 Ethics: every person is fictitious. Real SIRET numbers are only used on *legitimate* claims or as
-the letterhead forged by a fictitious adherent: no real optician is ever designated as a fraudster.
+the letterhead forged by a fictitious adherent, and the optician NAME is always fictitious:
+no real optician is ever displayed next to a fraud.
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import json
-import os
+import math
 import random
+import shutil
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
@@ -50,6 +58,8 @@ PRIX_B = {"SIMPLE": (180, 420), "MIXTE": (300, 560), "COMPLEXE": (380, 700), "TR
 PRIX_A = (90, 190)            # 100% Santé (classe A) equipment
 CODE_LPP = {"SIMPLE": "2203240", "MIXTE": "2263459", "COMPLEXE": "2235776", "TRES_COMPLEXE": "2259966"}  # illustrative
 RENOUVELLEMENT_JOURS = 730    # adults: 1 equipment every 2 years
+F2_GRACE_DAYS = 2             # a NOEMIE statement can arrive up to 2 days after the claim (late file incident)
+REF_DIR_DEFAULT = Path(__file__).resolve().parent / "ref"     # frozen reference extracts, versioned in Git
 
 FRAUD_TYPES = {
     "F1_RENOUVELLEMENT_PRECOCE": "Second full equipment less than 2 years after the previous one (adult)",
@@ -191,29 +201,30 @@ class Generator:
         self.start = date.fromisoformat(args.start_date)
         self.days = [self.start + timedelta(days=i) for i in range(args.days)]
         self.answer_key: list[dict] = []
+        self.quarantine_key: list[dict] = []
         self.noise_rows: list[dict] = []
         self.invoice_seq = 0
         self.synthetic_refs = {"opticiens": False, "prescripteurs": False}
 
     # ---------------- reference data ----------------
+    def fake_name(self) -> str:
+        return f"{self.rng.choice(OPTIQUE_NOMS)} {self.rng.choice(OPTIQUE_SUFFIX)}"
+
     def load_refs(self):
         ref = Path(self.a.refs_dir)
         self.opticiens = []
         p = ref / "opticiens_sirene.csv"
         if p.exists():
             with p.open(encoding="utf-8") as f:
-                for r in csv.DictReader(f):
-                    if r.get("etat_administratif", "A") == "A" and r.get("siret"):
-                        self.opticiens.append({"siret": r["siret"].strip(), "nom": (r.get("nom") or "OPTICIEN").strip()[:60]})
-            self.rng.shuffle(self.opticiens)
-            self.opticiens = self.opticiens[: self.a.opticiens]
+                sirets = sorted({r["siret"].strip() for r in csv.DictReader(f)
+                                 if r.get("siret") and r.get("etat_administratif", "A") == "A"})
+            self.rng.shuffle(sirets)
+            # real SIRET (checked against the real SIRENE API by the pipeline), FICTITIOUS name (ethics)
+            self.opticiens = [{"siret": s, "nom": self.fake_name()} for s in sirets[: self.a.opticiens]]
         if len(self.opticiens) < 10:
             self.synthetic_refs["opticiens"] = True
-            self.opticiens = [{"siret": fake_siret(self.rng),
-                               "nom": f"{self.rng.choice(OPTIQUE_NOMS)} {self.rng.choice(OPTIQUE_SUFFIX)}"}
-                              for _ in range(self.a.opticiens)]
-        self.ghosts = [{"siret": fake_siret(self.rng),
-                        "nom": f"{self.rng.choice(OPTIQUE_NOMS)} {self.rng.choice(OPTIQUE_SUFFIX)}"} for _ in range(6)]
+            self.opticiens = [{"siret": fake_siret(self.rng), "nom": self.fake_name()} for _ in range(self.a.opticiens)]
+        self.ghosts = [{"siret": fake_siret(self.rng), "nom": self.fake_name()} for _ in range(6)]
 
         self.prescripteurs = []
         p = ref / "ophtalmos_rpps.csv"
@@ -225,6 +236,14 @@ class Generator:
         if len(self.prescripteurs) < 10:
             self.synthetic_refs["prescripteurs"] = True
             self.prescripteurs = [fake_rpps(self.rng) for _ in range(self.a.prescripteurs)]
+        if any(self.synthetic_refs.values()) and not self.a.allow_synthetic:
+            raise SystemExit(f"Reference files missing or too small in {ref} ({self.synthetic_refs}). "
+                             "Freeze the real SIRENE / RPPS extracts first (see docs/part1_sources_bronze.md), "
+                             "or pass --allow-synthetic (CI only).")
+        for name in ("opticiens_sirene.csv", "ophtalmos_rpps.csv"):      # copy for load_rpps --reuse-extract
+            if (ref / name).exists():
+                (self.out / "ref").mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ref / name, self.out / "ref" / name)
         known = set(self.prescripteurs)
         self.fake_prescripteurs = []
         while len(self.fake_prescripteurs) < 15:
@@ -368,12 +387,16 @@ class Generator:
 
         # 3) Daily batches
         pending_noemie: list[dict] = []   # statements that arrive the next day
-        late_day = date.fromisoformat(a.late_noemie_date) if a.late_noemie_date else None
+        late_day = None if (a.late_noemie_date or "none").lower() == "none" else date.fromisoformat(a.late_noemie_date)
         drift_from = date.fromisoformat(a.schema_drift_from) if a.schema_drift_from else None
         resiliated: list[dict] = []
         next_adh = a.adherents + 1
+        counts = {t: 0 for t in FRAUD_TYPES}
+        last_idx = len(self.days) - 1
+        # day index by which each rule must have reached its minimum (F2 must be evaluable: outside the grace period)
+        deadline = {t: (last_idx - F2_GRACE_DAYS if t == "F2_SANS_DECOMPTE_NOEMIE" else last_idx) for t in FRAUD_TYPES}
 
-        for day in self.days:
+        for idx, day in enumerate(self.days):
             folder = raw / f"dt={day.isoformat()}"
             ts = datetime.combine(day, time(7, 30))
 
@@ -401,6 +424,7 @@ class Generator:
 
             # 3b) Legit claims of the day
             claims, noemie_today, noemie_tomorrow = [], [], []
+            prev_equipment = {}
             n = max(5, int(rng.gauss(a.claims_per_day, a.claims_per_day * 0.15)))
             active = [x for x in adherents if x["statut"] == "ACTIF"]
             tries = 0
@@ -416,22 +440,60 @@ class Generator:
                 canal = "TIERS_PAYANT" if rng.random() < 0.7 else "APP_ADHERENT"
                 c = self.build_claim(adh, d_soins, day, rng.choice(self.opticiens), rng.choice(self.prescripteurs), canal)
                 claims.append(c)
+                prev_equipment[c["id_demande"]] = prev
                 last_equipment[adh["id_adherent"]] = d_soins
                 (noemie_tomorrow if rng.random() < 0.2 else noemie_today).append(self.noemie_for(c, day))
 
-            # 3c) Injected frauds
-            n_fraud = sum(1 for _ in range(len(claims)) if rng.random() < a.fraud_rate)
-            for _ in range(n_fraud):
-                ftype = weighted(rng, FRAUD_MIX)
+            # 3b-bis) Unusable legit claims (NOT fraud): silver must put them in quarantine. Chosen BEFORE the frauds,
+            # and removed from the history used by F1 / F5, so that no fraud depends on a quarantined claim.
+            quarantined = {}
+            for c in rng.sample(claims, k=min(len(claims), max(1, round(len(claims) * a.invalid_rate)))):
+                quarantined[c["id_demande"]] = rng.choice(["MONTANT_NEGATIF", "DATE_SOINS_INVALIDE"])
+                prev = prev_equipment[c["id_demande"]]
+                if prev is None:
+                    last_equipment.pop(c["num_adherent"], None)
+                else:
+                    last_equipment[c["num_adherent"]] = prev
+                self.quarantine_key.append({"id_demande": c["id_demande"], "reason": quarantined[c["id_demande"]],
+                                            "date_reception": day.isoformat()})
+
+            # 3c) Injected frauds: random mix, then top-ups so that every rule reaches its minimum in time,
+            # and at least one F5 on the last day (the case opened during the live demo)
+            def add(ftype):
                 c = self.inject(ftype, day, active, last_equipment, reimbursed, resiliated, by_id)
                 if c is None:
-                    continue
+                    return False
                 claims.append(c)
+                counts[ftype] += 1
                 if ftype != "F2_SANS_DECOMPTE_NOEMIE":
                     noemie_today.append(self.noemie_for(c, day))
+                return True
+
+            n_fraud = sum(1 for _ in range(len(claims)) if rng.random() < a.fraud_rate)
+            for _ in range(n_fraud):
+                add(weighted(rng, FRAUD_MIX))
+            for ftype in FRAUD_TYPES:
+                if idx > deadline[ftype] or counts[ftype] >= a.min_per_rule:
+                    continue
+                needed = math.ceil((a.min_per_rule - counts[ftype]) / (deadline[ftype] - idx + 1))
+                done = attempts = 0
+                while done < needed and attempts < 80:
+                    attempts += 1
+                    done += add(ftype)
+            if idx == last_idx and not any(r["fraud_type"] == "F5_FACTURE_REUTILISEE" and r["date_reception"] == day.isoformat()
+                                           for r in self.answer_key):
+                attempts = 0
+                while attempts < 80 and not add("F5_FACTURE_REUTILISEE"):
+                    attempts += 1
 
             # 3d) Technical resends (NOT fraud): the same claim sent twice by the channel
             rows = [self.invoice_row(c) for c in claims]
+            for r, c in zip(rows, claims):                   # make the quarantined claims unusable
+                reason = quarantined.get(c["id_demande"])
+                if reason == "MONTANT_NEGATIF":
+                    r["montant_demande_amc"] = f"-{c['montant_demande_amc']:.2f}"
+                elif reason == "DATE_SOINS_INVALIDE":
+                    r["date_soins"] = rng.choice([f"{day.year}-02-30", f"31/02/{day.year}", f"{day.year}0231"])
             for r in rng.sample(rows, k=max(0, int(len(rows) * a.duplicate_rate))):
                 rows.append(dict(r))
                 self.noise_rows.append({"id_demande": r["id_demande"], "noise": "TECHNICAL_RESEND", "date": day.isoformat()})
@@ -444,7 +506,8 @@ class Generator:
                     r["code_reseau_partenaire"] = rng.choice(["", "RES01", "RES02"])
             self.write_csv(folder / "factures" / f"factures_optique_{day:%Y%m%d}.csv", columns, rows)
             for c in claims:
-                reimbursed.append((c["siret_opticien"], c["numero_facture"], c["num_adherent"]))
+                if c["id_demande"] not in quarantined:
+                    reimbursed.append((c["siret_opticien"], c["numero_facture"], c["num_adherent"]))
 
             # 3e) NOEMIE: today's statements + yesterday's late ones (unless the incident is simulated)
             docs = pending_noemie + noemie_today
@@ -460,6 +523,9 @@ class Generator:
             self.write_jsonl(raw / f"dt={d_after.isoformat()}" / "noemie" / f"noemie_{d_after:%Y%m%d}.jsonl", pending_noemie)
 
         self.write_outputs()
+        short = {t: n for t, n in counts.items() if n < a.min_per_rule}
+        if short:
+            raise SystemExit(f"Could not reach --min-per-rule {a.min_per_rule} for {short}: use more days or adherents.")
 
     def inject(self, ftype, day, active, last_equipment, reimbursed, resiliated, by_id):
         rng = self.rng
@@ -528,6 +594,7 @@ class Generator:
         self.write_csv(ak / "fraud_answer_key.csv",
                        ["id_demande", "fraud_type", "date_reception", "num_adherent", "siret_opticien",
                         "montant_demande_amc", "detail"], self.answer_key)
+        self.write_csv(ak / "quarantine_key.csv", ["id_demande", "reason", "date_reception"], self.quarantine_key)
         (ak / "references_used.json").write_text(json.dumps(
             {"legit_opticiens_siret": [o["siret"] for o in self.opticiens],
              "ghost_opticiens_siret": [o["siret"] for o in self.ghosts],
@@ -542,10 +609,13 @@ class Generator:
             indent=2, ensure_ascii=False), encoding="utf-8")
         (ak / "generation_manifest.json").write_text(json.dumps(
             {"generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"), "parameters": vars(self.a),
+             "first_day": self.days[0].isoformat(), "last_day": self.days[-1].isoformat(),
+             "f2_grace_days": F2_GRACE_DAYS, "quarantined_claims": len(self.quarantine_key),
              "synthetic_references": self.synthetic_refs, "fraud_counts": counts,
              "fraud_definitions": FRAUD_TYPES, "plafonds_contrat_responsable": PLAFONDS,
              "garanties_formules": GARANTIES}, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         print(f"Done. Frauds injected: {sum(counts.values())} {counts}")
+        print(f"Quarantine (invalid legit claims): {len(self.quarantine_key)}")
         print(f"Synthetic references used: {self.synthetic_refs}")
         print(f"Output: {self.out.resolve()}")
 
@@ -553,7 +623,9 @@ class Generator:
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--out", default="data", help="output folder (default: data)")
-    p.add_argument("--refs-dir", default="data/ref", help="folder with opticiens_sirene.csv / ophtalmos_rpps.csv")
+    p.add_argument("--refs-dir", default=str(REF_DIR_DEFAULT),
+                   help="folder with the frozen opticiens_sirene.csv / ophtalmos_rpps.csv (default: data_generator/ref)")
+    p.add_argument("--allow-synthetic", action="store_true", help="CI only: synthetic SIRET/RPPS if the references are missing")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--start-date", default="2026-10-26", help="first daily batch (YYYY-MM-DD)")
     p.add_argument("--days", type=int, default=10, help="number of daily batches")
@@ -564,8 +636,11 @@ def main():
     p.add_argument("--claims-per-day", type=int, default=160)
     p.add_argument("--fraud-rate", type=float, default=0.07)
     p.add_argument("--duplicate-rate", type=float, default=0.01, help="technical resends (not fraud)")
+    p.add_argument("--invalid-rate", type=float, default=0.005, help="legit claims made unusable (quarantine), min 1/day")
+    p.add_argument("--min-per-rule", type=int, default=5, help="minimum frauds per rule F1..F7")
     p.add_argument("--mess", choices=["low", "medium", "high"], default="medium")
-    p.add_argument("--late-noemie-date", default=None, help="incident: no NOEMIE file that day (YYYY-MM-DD)")
+    p.add_argument("--late-noemie-date", default="2026-10-30",
+                   help="incident 2: no NOEMIE file that day, delivered the day after (YYYY-MM-DD, or 'none')")
     p.add_argument("--schema-drift-from", default=None, help="incident: new column in invoices from that day")
     args = p.parse_args()
     Generator(args).run()

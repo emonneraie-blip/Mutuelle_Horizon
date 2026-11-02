@@ -5,9 +5,9 @@
    (XSMALL, auto_suspend 60), roles `INGEST_ROLE` / `TRANSFORM_ROLE` / `ANALYST_ROLE` (granted to SYSADMIN),
    service users `SVC_INGEST` / `SVC_TRANSFORM` (`snowflake_service_user`, public keys as variables), grants
    (USAGE + CREATE SCHEMA on the database for INGEST/TRANSFORM, USAGE on their warehouse, project roles to the human users,
-   read access for `REDGRAVE_GRADER`).
+   read access for `REDGRAVE_GRADER` on SILVER / GOLD / OPS only: nobody outside INGEST / TRANSFORM reads BRONZE, which holds the NIR).
 2. Remote state on HCP Terraform (`cloud {}` block, free tier). `terraform.tfvars` and `*.tfstate` are gitignored.
-3. `.github/workflows/ci.yml`: `fmt -check`, `validate`, `plan` on each PR + a Python job (`generate.py` then `validate.py`).
+3. `.github/workflows/ci.yml`: `fmt -check`, `validate`, `plan` on each PR + a Python job (`python3 data_generator/generate.py --seed 42` then `python3 data_generator/validate.py --data data --each-day`).
    Do NOT put `${{ runner.temp }}` in the job-level `env:` (invalid context). Write the key inside the step:
 
 ```yaml

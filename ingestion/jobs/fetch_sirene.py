@@ -2,9 +2,10 @@
 
 Two modes:
 
-  catalogue   build the list of REAL active optical shops (NAF 47.78A) used by the data generator
+  catalogue   build the list of REAL active optical shops (NAF 47.78A) used by the data generator (run ONCE,
+              then the file is frozen in data_generator/ref/ and versioned: same seed = same data everywhere)
               python -m jobs.fetch_sirene catalogue --departements 75 92 93 94 --max 400
-              -> DATA_DIR/ref/opticiens_sirene.csv
+              -> DATA_DIR/ref/opticiens_sirene.csv (SIRET, postcode, town, status; no shop name)
 
   lookup      pipeline step: check every SIRET seen in the claims that was not checked yet (incremental)
               python -m jobs.fetch_sirene lookup
@@ -75,8 +76,7 @@ def catalogue(departements: list[str], max_rows: int) -> None:
                     if (e.get("activite_principale") or NAF_OPTIQUE) != NAF_OPTIQUE:
                         continue
                     seen.add(siret)
-                    out.append({"siret": siret, "siren": res.get("siren"),
-                                "nom": e.get("nom_commercial") or res.get("nom_complet") or "",
+                    out.append({"siret": siret, "siren": res.get("siren"),        # no name: data minimisation
                                 "code_postal": e.get("code_postal"), "commune": e.get("libelle_commune") or e.get("commune"),
                                 "etat_administratif": e.get("etat_administratif"),
                                 "activite_principale": e.get("activite_principale")})
