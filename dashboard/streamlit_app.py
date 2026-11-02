@@ -4,6 +4,7 @@ Déploiement : Snowsight > Projects > Streamlit > + Streamlit App, rôle TRANSFO
 base MUTUELLE_FRAUD, schéma GOLD. Coller ce fichier. Snowflake fournit la session : aucun mot de passe ici.
 Lit uniquement GOLD. Les données sont fictives et aucun vrai SIRET n'est affiché en clair.
 """
+import pandas as pd
 import streamlit as st
 from snowflake.snowpark.context import get_active_session
 
@@ -36,7 +37,10 @@ if kpi.empty:
     st.stop()
 
 dernier = kpi.iloc[0]
-st.caption(f"Dernier lot traité : {dernier['batch_date']} · calculé le {dernier['calcule_le']} · données fictives")
+calcule_le = pd.Timestamp(dernier["calcule_le"])
+if calcule_le.tzinfo is not None:
+    calcule_le = calcule_le.tz_convert("Europe/Paris")      # Snowflake répond dans le fuseau du compte
+st.caption(f"Dernier lot traité : {dernier['batch_date']} · calculé le {calcule_le:%d/%m/%Y à %H:%M} (Paris) · données fictives")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Factures du lot", f"{int(dernier['nb_factures']):,}".replace(",", " "))
