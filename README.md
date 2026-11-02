@@ -25,7 +25,8 @@ Data Engineering & Cloud Infrastructure — Albert School · Group 1: Lucas Stef
 
 ```bash
 cp .env.example .env                                         # fill in; keys stay in ~/keys/mutuelle, never in Git
-python3 data_generator/generate.py --seed 42 && python3 data_generator/validate.py --data data
+python3 data_generator/generate.py --seed 42                 # official data set (real references frozen in data_generator/ref/)
+python3 data_generator/validate.py --data data --each-day    # expected: VALIDATION OK
 docker build -t fraud-ingest:1.0.0 ingestion/ && docker compose -f docker-compose.crm.yml up -d
 # Snowflake objects: terraform/ (see terraform/README.md), then the ingestion runbook: docs/part1_sources_bronze.md
 ```
