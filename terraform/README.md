@@ -59,6 +59,3 @@ terraform destroy
 
 Puis, dans Snowsight, avec ACCOUNTADMIN : `DROP USER SVC_TERRAFORM;` et `DROP RESOURCE MONITOR MUTUELLE_MONITOR;`.
 
-## Note pour dbt (Clément)
-
-L'accès de la prof passe par des droits « futurs » au niveau de la base. Ne pas ajouter de `GRANT ... ON FUTURE ... IN SCHEMA` dans dbt : un droit futur au niveau d'un schéma remplace celui de la base pour ce schéma, et la prof perdrait l'accès.
