@@ -1,0 +1,26 @@
+# secrets — never in Git
+.env
+*.p8
+*.pem
+*.pub
+*.tfvars
+!*.tfvars.example
+# generated data (regenerate with: python3 data_generator/generate.py --seed 42)
+data/
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+# dbt
+transformation/**/target/
+transformation/**/dbt_packages/
+transformation/**/logs/
+# airflow
+airflow/logs/
+airflow/plugins/__pycache__/
+# python / OS
+__pycache__/
+*.pyc
+.venv/
+.DS_Store

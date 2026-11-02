@@ -1,0 +1,20 @@
+# Local CRM database (simulates the mutuelle's operational Postgres).  docker compose -f docker-compose.crm.yml up -d
+# Alternative for a shared cloud source: a free Neon/Supabase Postgres -> just change PGHOST/PGUSER/PGPASSWORD in .env
+services:
+  crm-postgres:
+    image: postgres:16.4
+    container_name: mutuelle-crm
+    environment:
+      POSTGRES_DB: mutuelle_crm
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: ${CRM_PASSWORD:-change-me-locally}
+    ports:
+      - "5433:5432"          # 5433 on the host so it does not clash with a Postgres already installed
+    volumes:
+      - crm-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d mutuelle_crm"]
+      interval: 5s
+      retries: 10
+volumes:
+  crm-data:

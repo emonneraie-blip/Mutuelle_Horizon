@@ -1,0 +1,22 @@
+# Direct dependencies + every transitive one, all pinned (resolved for Python 3.12 on 2026-11-02).
+snowflake-connector-python==3.12.3
+psycopg2-binary==2.9.10
+requests==2.32.3
+# transitive
+asn1crypto==1.5.1
+certifi==2026.10.23
+cffi==1.17.1
+charset-normalizer==3.5.2
+cryptography==44.0.3
+filelock==3.32.7
+idna==3.20
+packaging==26.3
+platformdirs==4.14.3
+pycparser==3.12
+PyJWT==2.15.1
+pyOpenSSL==24.3.0
+pytz==2026.6
+sortedcontainers==2.4.0
+tomlkit==0.15.2
+typing_extensions==4.16.0
+urllib3==2.8.0

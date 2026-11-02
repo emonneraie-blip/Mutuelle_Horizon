@@ -1,0 +1,52 @@
+-- ============================================================================================================
+-- Mutuelle Horizon Santé · bootstrap ADMIN (the only manual step of the platform)
+-- Run ONCE by Lucas (account owner, ACCOUNTADMIN) in Snowsight, BEFORE the first `terraform apply`.
+-- Everything else (database, warehouses, roles, service users SVC_INGEST / SVC_TRANSFORM, grants) is Terraform.
+-- Paste only PUBLIC keys (content of the .pub file, without the -----BEGIN/END----- lines). Never a private key.
+-- ============================================================================================================
+USE ROLE ACCOUNTADMIN;
+
+-- 1. Terraform's own identity: a SERVICE user (no password, cannot log into Snowsight), RSA key only.
+CREATE USER IF NOT EXISTS SVC_TERRAFORM
+  TYPE = SERVICE
+  RSA_PUBLIC_KEY = 'PASTE_SVC_TERRAFORM_PUBLIC_KEY'
+  DEFAULT_ROLE = SYSADMIN
+  COMMENT = 'Terraform (GitHub Actions + Eliott). Owner: Eliott';
+GRANT ROLE SYSADMIN      TO USER SVC_TERRAFORM;   -- creates database, warehouses
+GRANT ROLE SECURITYADMIN TO USER SVC_TERRAFORM;   -- creates roles, service users, grants
+
+-- 2. Human accounts (one per person, never shared). Type a temporary password in Snowsight only (never commit it),
+--    sent to the person by DM, changed at first login. RSA key for the CLI.
+CREATE USER IF NOT EXISTS ELIOTT
+  TYPE = PERSON
+  PASSWORD = 'TEMP_PASSWORD_TO_FILL_IN_SNOWSIGHT_ONLY' MUST_CHANGE_PASSWORD = TRUE
+  RSA_PUBLIC_KEY = 'PASTE_ELIOTT_PUBLIC_KEY'
+  DEFAULT_ROLE = SYSADMIN
+  COMMENT = 'Eliott Monneraie - platform owner';
+GRANT ROLE SYSADMIN      TO USER ELIOTT;
+GRANT ROLE SECURITYADMIN TO USER ELIOTT;
+
+CREATE USER IF NOT EXISTS CLEMENT
+  TYPE = PERSON
+  PASSWORD = 'TEMP_PASSWORD_TO_FILL_IN_SNOWSIGHT_ONLY' MUST_CHANGE_PASSWORD = TRUE
+  RSA_PUBLIC_KEY = 'PASTE_CLEMENT_PUBLIC_KEY'
+  DEFAULT_ROLE = PUBLIC                           -- Terraform grants TRANSFORM_ROLE + ANALYST_ROLE, then: ALTER USER CLEMENT SET DEFAULT_ROLE = TRANSFORM_ROLE
+  COMMENT = 'Clément Badalucco - transformation owner';
+
+-- 3. Cost guardrail (needs ACCOUNTADMIN, so it lives here and not in Terraform).
+CREATE RESOURCE MONITOR IF NOT EXISTS MUTUELLE_MONITOR
+  WITH CREDIT_QUOTA = 20 FREQUENCY = MONTHLY START_TIMESTAMP = IMMEDIATELY
+  TRIGGERS ON 50 PERCENT DO NOTIFY
+           ON 80 PERCENT DO NOTIFY
+           ON 100 PERCENT DO SUSPEND;
+-- Attached to the 3 project warehouses once Terraform has created them (step 4).
+
+-- 4. AFTER the first `terraform apply` (re-run only this block):
+-- ALTER WAREHOUSE INGEST_WH    SET RESOURCE_MONITOR = MUTUELLE_MONITOR;
+-- ALTER WAREHOUSE TRANSFORM_WH SET RESOURCE_MONITOR = MUTUELLE_MONITOR;
+-- ALTER WAREHOUSE BI_WH        SET RESOURCE_MONITOR = MUTUELLE_MONITOR;
+-- ALTER USER CLEMENT SET DEFAULT_ROLE = TRANSFORM_ROLE DEFAULT_WAREHOUSE = TRANSFORM_WH;
+
+-- Check
+SHOW USERS LIKE 'SVC_%';
+SHOW GRANTS TO USER SVC_TERRAFORM;
