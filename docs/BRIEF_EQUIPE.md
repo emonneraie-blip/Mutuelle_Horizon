@@ -34,7 +34,7 @@ La grille de l'oral (/80) est la suivante :
 
 **Mutuelle Horizon Santé** est une complémentaire santé **fictive** : 300 000 adhérents, environ 250 M€ de cotisations par an, dont environ 80 % reversés en remboursements.
 
-**Le problème.** En France, 112 M€ de fraude à la complémentaire santé ont été détectés en 2025, dont **53 % en optique**. Pour Horizon, on fait l'**hypothèse** d'environ 1 % de remboursements frauduleux non détectés, soit environ 2 M€ par an. L'objectif est d'en bloquer la moitié **avant paiement**.
+**Le problème.** En France, 112 M€ de fraude à la complémentaire santé ont été détectés en 2025, dont **53 % en optique**. Pour Horizon, on fait l'**hypothèse** d'environ 1 % de remboursements frauduleux non détectés, soit environ 2 M€ par an, dont environ 1 M€ en optique si on applique la part nationale de 53 %. L'objectif est d'en bloquer la moitié, soit environ **0,5 M€ par an, avant paiement**.
 
 **Le cas d'usage.** Chaque matin, le **gestionnaire anti-fraude** reçoit la liste des **factures optique à contrôler** avant de les payer.
 
@@ -92,7 +92,7 @@ Les données de référence pour ces règles :
 | Ingestion | jobs Python en Docker | une méthode adaptée à chaque source, code déjà testé en TD | Airbyte, dlt |
 | Transformation | dbt | médaillon, tests, lineage, comme au TD dbt | SQL dans des Snowflake Tasks |
 | Orchestration | Airflow + DockerOperator | retries, backfill, alertes (TD Airflow) | Snowflake Tasks, Dagster |
-| Infra as Code | Terraform + state distant (HCP Terraform, gratuit) | reproductible, relu en PR, détection de dérive (TD Terraform) | — |
+| Infra as Code | Terraform + state distant (HCP Terraform, gratuit) | reproductible, relu en PR, détection de dérive (TD Terraform) | Pulumi ; scripts SQL lancés à la main (plus simple, mais sans détection de dérive) |
 | Fréquence | batch quotidien | la décision est quotidienne | streaming : coût et complexité inutiles |
 
 ---
@@ -234,7 +234,7 @@ La **spécification exécutable** de chaque règle, de chaque nettoyage, de la q
    - comptes : `SVC_INGEST` pour l'ingestion, `SVC_TRANSFORM` pour dbt ;
    - préchargement par **backfill** (dates logiques du 27/10 au 04/11 = lots du 26/10 au 03/11) : l'historique Airflow garde le run rouge du 30/10 et le vert du 31/10 ;
    - script de démo : `jobs.reset_demo --yes` puis rechargement, pour les répétitions et la vidéo.
-4. **Sécurité (C7)** : la démo « accès refusé » (`USE ROLE ANALYST_ROLE; SELECT * FROM GOLD.MART_FACTURES_A_CONTROLER;` → erreur, alors que `KPI_FRAUDE_QUOTIDIEN` passe) et `docs/security.md`.
+4. **Sécurité (C7)** : la démo « accès refusé » (`USE ROLE ANALYST_ROLE; USE SECONDARY ROLES NONE; USE WAREHOUSE BI_WH; SELECT * FROM MUTUELLE_FRAUD.GOLD.MART_FACTURES_A_CONTROLER;` → erreur, alors que `KPI_FRAUDE_QUOTIDIEN` passe) et `docs/security.md`.
 5. **FinOps (C7)** :
    - coût réel du prototype : `ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY`, par entrepôt ;
    - projection mensuelle avec ses hypothèses ;

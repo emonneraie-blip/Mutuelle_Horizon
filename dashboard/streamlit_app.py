@@ -1,7 +1,7 @@
 """Mutuelle Horizon Santé · liste du gestionnaire anti-fraude (Streamlit in Snowflake).
 
-Déploiement : Snowsight > Projects > Streamlit > + Streamlit App, rôle TRANSFORM_ROLE, entrepôt BI_WH,
-base MUTUELLE_FRAUD, schéma GOLD. Coller ce fichier. Snowflake fournit la session : aucun mot de passe ici.
+Déployée dans MUTUELLE_FRAUD.GOLD (rôle TRANSFORM_ROLE, entrepôt BI_WH) : voir dashboard/README.md.
+Snowflake fournit la session : aucun mot de passe ici.
 Lit uniquement GOLD. Les données sont fictives et aucun vrai SIRET n'est affiché en clair.
 """
 import pandas as pd

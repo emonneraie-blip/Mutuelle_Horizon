@@ -31,5 +31,17 @@ docker build -t fraud-ingest:1.0.0 ingestion/ && docker compose -f docker-compos
 # Snowflake objects: terraform/ (see terraform/README.md), then the ingestion runbook: docs/part1_sources_bronze.md
 ```
 
+## Transformation and dashboard
+
+```bash
+cd transformation
+export SNOWFLAKE_ACCOUNT=<see .env> SNOWFLAKE_USER=<your user> SNOWFLAKE_PRIVATE_KEY_FILE=<path to your .p8 key>
+export DBT_PROFILES_DIR=. NIR_SALT=<shared secret, never in Git>   # 16 characters minimum, otherwise dbt refuses to start
+dbt build --vars '{batch_date: 2026-11-03}'                        # builds SILVER and GOLD and runs every test; expected: no error
+docker build -t fraud-dbt:1.0.0 .                                  # image used by Airflow
+```
+
+Dashboard: in Snowsight, Projects > Streamlit > `DASHBOARD_ANTI_FRAUDE`, then Start (about 1 minute to start). Details: `transformation/README.md`, `dashboard/README.md`.
+
 Rules of the repo: no direct push on `main`, one branch + one reviewed pull request per change, no secret ever committed.
 All people, NIR numbers and claims are fictitious; real SIRET / RPPS numbers are never labelled as fraudsters (see `docs/contracts.md`).
