@@ -266,8 +266,8 @@ La **spécification exécutable** de chaque règle, de chaque nettoyage, de la q
 
 Préparation la veille : la base est chargée jusqu'au **03/11 inclus**, Airflow est démarré, le dashboard est ouvert.
 
-1. **Airflow** : cliquer sur « Trigger » (le run du 5/11 traite le lot du **04/11**, sans date à taper), puis montrer le graphe (ingestion en parallèle → SIRENE → dbt) qui passe au vert (Eliott).
-2. **Snowsight** : `LOAD_AUDIT` du jour, puis relancer `ingest_factures` → `ALREADY_LOADED`. C'est l'idempotence (Lucas).
+1. **Airflow** : **retirer la pause** du DAG, sans cliquer sur « Déclencher » (le run planifié du 5/11 traite le lot du **04/11**, voir `docs/demo.md`), puis montrer le graphe (ingestion en parallèle → SIRENE → dbt) qui passe au vert (Eliott).
+2. **Snowsight** : `LOAD_AUDIT` du jour, puis relancer `ingest_factures` → `ALREADY_LOADED`, avant de remettre la pause. C'est l'idempotence (Lucas).
 3. **Dashboard** : les factures du 04/11 à contrôler, avec les règles déclenchées. Ouvrir **la F5 du 04/11** (« facture réutilisée », son `id_demande` est affiché par `validate.py`) et l'expliquer (Clément). Les F2 du jour sont « en attente » : c'est normal, et ça se défend (décision F2 et paiement à J+3).
 4. **Accès refusé** avec `ANALYST_ROLE` (Eliott).
 
