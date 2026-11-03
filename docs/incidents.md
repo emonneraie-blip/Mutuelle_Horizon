@@ -33,7 +33,7 @@ SELECT * FROM MUTUELLE_FRAUD.GOLD.KPI_FRAUDE_QUOTIDIEN ORDER BY batch_date DESC;
 
 | Lot | Run Airflow | Durée | Résultat |
 |---|---|---|---|
-| 30/10 | Trigger manuel, date logique 31/10 (03/11, 09:50) | `dbt_build` : 3 × 40 s | rouge : `NO_FILE`, test de complétude en échec, gold non publié, alerte Discord |
+| 30/10 | Trigger manuel, date logique 31/10 (03/11, 10:50, heure de Paris) | `dbt_build` : 3 × 40 s | rouge : `NO_FILE`, test de complétude en échec, gold non publié, alerte Discord |
 | 31/10 | [À REMPLIR pendant le backfill] | [À REMPLIR] | vert : rattrapage des décomptes des deux jours |
 
 ## Bonus · Changement de schéma des factures (si on nous le demande)

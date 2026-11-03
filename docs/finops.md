@@ -10,6 +10,7 @@ Principe : on paie seulement le calcul réellement utilisé, on le voit par usag
 |---|---|---|
 | Snowflake : 3 entrepôts XSMALL | crédits, seulement quand un entrepôt tourne | arrêt automatique après 60 s, démarrage à la demande, suspendus à la création |
 | Snowflake : stockage | négligeable (quelques Mo) | quelques milliers de lignes par jour |
+| Snowflake : compute pool du dashboard (`SYSTEM_COMPUTE_POOL_CPU`) | crédits, tant que l'application Streamlit tourne | **non couvert par le resource monitor**, qui ne surveille que les entrepôts |
 | Airflow + Docker | 0 € | tournent sur la machine de démo |
 | HCP Terraform (state), GitHub (repo + CI), Discord (alertes) | 0 € | offres gratuites |
 
@@ -80,10 +81,13 @@ Vérification : `SHOW RESOURCE MONITORS LIKE 'MUTUELLE_MONITOR';` → [À REMPLI
 
 Terraform ignore volontairement ce rattachement (`ignore_changes` dans le module warehouse) : un `apply` ne le retire jamais.
 
+Limite : le resource monitor ne surveille que les entrepôts. Le compute pool du dashboard n'est pas plafonné. On le maîtrise en arrêtant l'application quand on ne s'en sert pas, et en suivant sa consommation dans Snowsight (Admin → Cost Management).
+
 ## 5. Procédure d'arrêt et de nettoyage (après la note)
 
 1. **Arrêter le pipeline** : mettre le DAG en pause dans Airflow, puis `docker compose down` dans `airflow/`, et `docker compose -f docker-compose.crm.yml down` à la racine.
-2. **Supprimer la plateforme** : `cd terraform && terraform destroy`. Cela supprime la base, les 3 entrepôts, les rôles et les comptes de service.
-3. **Nettoyer les étapes manuelles** (ACCOUNTADMIN) : `DROP USER SVC_TERRAFORM; DROP USER CLEMENT; DROP USER ELIOTT; DROP RESOURCE MONITOR MUTUELLE_MONITOR;`
-4. **Révoquer les secrets** : supprimer le webhook Discord, le workspace HCP `mutuelle-fraud` et les clés dans `~/keys/`.
-5. **Vérifier** : `SHOW WAREHOUSES;` et `SHOW DATABASES LIKE 'MUTUELLE_FRAUD';` ne renvoient plus rien.
+2. **Arrêter le dashboard** : supprimer l'application Streamlit `DASHBOARD_ANTI_FRAUDE`, pour que le compute pool ne consomme plus.
+3. **Supprimer la plateforme** : `cd terraform && terraform destroy`. Cela supprime la base, les 3 entrepôts, les rôles et les comptes de service.
+4. **Nettoyer les étapes manuelles** (ACCOUNTADMIN) : `DROP USER SVC_TERRAFORM; DROP USER CLEMENT; DROP USER ELIOTT; DROP RESOURCE MONITOR MUTUELLE_MONITOR;`
+5. **Révoquer les secrets** : supprimer le webhook Discord, le workspace HCP `mutuelle-fraud` et les clés dans `~/keys/`.
+6. **Vérifier** : `SHOW WAREHOUSES;` et `SHOW DATABASES LIKE 'MUTUELLE_FRAUD';` ne renvoient plus rien.

@@ -16,15 +16,17 @@ Pourquoi (testé le 03/11 sur Airflow 3.3.2) :
 
 1. Le DAG est **en pause** depuis mercredi soir, donc aucun run n'est parti à 06:00.
 2. Onglet **Runs** : **aucun run « En file »**. S'il y en a un, le supprimer (icône corbeille).
-3. Le dernier run vert traite le lot du 03/11, et le dashboard affiche le 03/11.
+3. Le dernier run vert traite le lot du 03/11.
+4. **Ouvrir le dashboard** (Snowsight → Streamlit, `DASHBOARD_ANTI_FRAUDE`) avant le début de l'oral : il affiche le lot du 03/11.
 
 ## Pendant la démo
 
 1. Retirer la pause, ce qui fait apparaître le run `scheduled__2026-11-05…`.
 2. Ouvrir la vue graphe : les 6 tâches passent au vert en environ 1 minute.
-3. Montrer dans les logs de `ingest_factures` la ligne `--date 2026-11-04`.
-4. Prévenir Clément : le dashboard affiche le lot du 04/11 (avec la F5 du jour).
-5. **Remettre la pause.**
+3. Montrer dans les logs de `ingest_factures` la ligne `batch 2026-11-04` : le lot de la veille.
+4. **Relance sans doublon (incident 1 en direct)** : sur le run vert, relancer `ingest_factures` (Clear). Le log affiche `ALREADY_LOADED`, 0 ligne.
+5. Attendre **1 minute** (le cache du dashboard dure 60 s), puis rafraîchir le dashboard : il affiche le lot du 04/11, avec la F5 du jour.
+6. **Remettre la pause.**
 
 ## Si le run ne part pas dans la minute
 
