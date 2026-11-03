@@ -19,6 +19,12 @@ resource "snowflake_warehouse" "this" {
   auto_resume         = true
   initially_suspended = true
   comment             = var.comment
+
+  # Le resource monitor est rattaché à la main par ACCOUNTADMIN (bootstrap_admin.sql, bloc 4) :
+  # Terraform ne doit pas le retirer au prochain apply.
+  lifecycle {
+    ignore_changes = [resource_monitor]
+  }
 }
 
 output "name" {
