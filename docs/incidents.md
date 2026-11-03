@@ -29,12 +29,12 @@ SELECT * FROM MUTUELLE_FRAUD.GOLD.KPI_FRAUDE_QUOTIDIEN ORDER BY batch_date DESC;
 | **Détection** | `load_noemie` enregistre `NO_FILE` (avertissement, pas d'échec). Le test dbt `assert_lot_noemie_present` échoue. |
 | **Effet** | `dbt build` s'arrête avant gold : la liste à contrôler n'est pas publiée, et celle de la veille reste en place. La tâche `dbt_build` échoue après 2 relances, et **une alerte part sur Discord**. |
 | **Reprise** | Le 31/10, le fichier arrive avec les décomptes des deux jours. Le run suivant repasse au vert sans intervention. Grâce au délai de grâce de 2 jours de F2, aucune facture n'est signalée F2 à tort. |
-| **Preuve** | `preuves/incident2_dbt_build_echec.png` : `Failure in test assert_lot_noemie_present`, `PASS=31 ERROR=1 SKIP=15` (les 15 modèles et tests de gold sont sautés), 3 essais de 40 s. `preuves/incident2_alerte_discord.png` : « tâche dbt_build en échec pour le lot du 2026-10-30 (run du 2026-10-31, essai 3) », reçue à 10:56. Run vert du 31/10 : [À REMPLIR pendant le backfill] |
+| **Preuve** | `preuves/incident2_dbt_build_echec.png` : `Failure in test assert_lot_noemie_present`, `PASS=31 ERROR=1 SKIP=15` (les 15 modèles et tests de gold sont sautés), 3 essais de 40 s. `preuves/incident2_alerte_discord.png` : « tâche dbt_build en échec pour le lot du 2026-10-30 (run du 2026-10-31, essai 3) », reçue à 10:56. Reprise : `preuves/incident2_reprise_grille.png` (le rattrapage du 01/11, lot du 31/10, est vert à côté du run rouge du 31/10, lot du 30/10) et `preuves/incident2_reprise_dbt_vert.png` (`dbt_build` vert dès le 1er essai, `assert_lot_noemie_present` en PASS, `Done. PASS=46 WARN=0 ERROR=0`) |
 
 | Lot | Run Airflow | Durée | Résultat |
 |---|---|---|---|
 | 30/10 | Trigger manuel, date logique 31/10 (03/11, 10:50, heure de Paris) | `dbt_build` : 3 × 40 s | rouge : `NO_FILE`, test de complétude en échec, gold non publié, alerte Discord |
-| 31/10 | [À REMPLIR pendant le backfill] | [À REMPLIR] | vert : rattrapage des décomptes des deux jours |
+| 31/10 | Rattrapage Airflow, date logique 01/11 (03/11, 11:38, heure de Paris) | `dbt_build` : 45 s, 1 essai ; run : environ 1 min d'exécution (2 min 30 avec l'attente, car un rattrapage reste « En file » tant que le DAG est en pause) | vert : décomptes des deux jours chargés, test de complétude en PASS, gold republié sans intervention |
 
 ## Bonus · Changement de schéma des factures (si on nous le demande)
 
