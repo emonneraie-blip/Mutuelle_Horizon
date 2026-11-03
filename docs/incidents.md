@@ -2,7 +2,7 @@
 
 Deux incidents réels, rejoués par le pipeline lui-même et documentés avec leurs preuves. Le DAG traite chaque matin le lot de la veille, avec 2 relances par tâche et une alerte Discord après le dernier échec.
 
-> Les valeurs `[À REMPLIR]` et les captures viennent du backfill Airflow sur la machine de démo (dates logiques du 27/10 au 04/11).
+> Testés en réel le 03/11 sur la machine de démo (Airflow + Snowflake). Run complet : 6 tâches, **1 min 02 s** (`preuves/run_vert.png`).
 
 ## Incident 1 · Relance d'un lot déjà chargé (aucun double comptage)
 
@@ -10,21 +10,16 @@ Deux incidents réels, rejoués par le pipeline lui-même et documentés avec le
 |---|---|
 | **Scénario** | Une tâche plante après avoir écrit, ou quelqu'un relance un jour déjà traité. Sans protection, les factures seraient comptées deux fois et le montant à risque doublerait, alors que tout resterait vert. |
 | **Protection** | `COPY INTO` ne recharge jamais un fichier déjà chargé. Le CRM passe par un `MERGE` sur la clé. dbt reconstruit silver et gold à partir de BRONZE. |
-| **Comment le rejouer** | Dans Airflow, relancer (Clear) le run du [À REMPLIR : ex. 03/11], ou `run jobs.run_day --date 2026-10-27 --simulate-crm`. |
+| **Comment le rejouer** | Relancer dans Airflow un jour déjà chargé. Testé avec le run planifié du 03/11 06:00, qui retraite le lot du 02/11. |
 | **Résultat attendu** | `ALREADY_LOADED`, 0 ligne chargée, `MERGE: 0 inserted, 0 updated`. Les comptes de BRONZE et le KPI du jour sont identiques avant et après. |
-| **Preuve** | [À REMPLIR : capture des logs `ingest_factures` et de `LOAD_AUDIT`] |
+| **Preuve** | `preuves/incident1_already_loaded.png` : `batch 2026-11-02: 0 file(s), 0 rows loaded (ALREADY_LOADED); rows in file(s): 185`, tâche en 5,8 s, run vert |
 
-Contrôle avant / après :
+Contrôle (à relancer avant et après une relance) :
 
 ```sql
 SELECT COUNT(*), COUNT(DISTINCT ID_DEMANDE) FROM MUTUELLE_FRAUD.BRONZE.FACTURES_OPTIQUE;
-SELECT * FROM MUTUELLE_FRAUD.GOLD.KPI_FRAUDE_QUOTIDIEN WHERE batch_date = '[À REMPLIR]';
+SELECT * FROM MUTUELLE_FRAUD.GOLD.KPI_FRAUDE_QUOTIDIEN ORDER BY batch_date DESC;
 ```
-
-| | Avant | Après la relance |
-|---|---|---|
-| Lignes de factures | [À REMPLIR] | [À REMPLIR : identique] |
-| Montant à risque du jour | [À REMPLIR] | [À REMPLIR : identique] |
 
 ## Incident 2 · Décomptes NOEMIE en retard (le 30/10)
 
@@ -34,12 +29,12 @@ SELECT * FROM MUTUELLE_FRAUD.GOLD.KPI_FRAUDE_QUOTIDIEN WHERE batch_date = '[À R
 | **Détection** | `load_noemie` enregistre `NO_FILE` (avertissement, pas d'échec). Le test dbt `assert_lot_noemie_present` échoue. |
 | **Effet** | `dbt build` s'arrête avant gold : la liste à contrôler n'est pas publiée, et celle de la veille reste en place. La tâche `dbt_build` échoue après 2 relances, et **une alerte part sur Discord**. |
 | **Reprise** | Le 31/10, le fichier arrive avec les décomptes des deux jours. Le run suivant repasse au vert sans intervention. Grâce au délai de grâce de 2 jours de F2, aucune facture n'est signalée F2 à tort. |
-| **Preuve** | [À REMPLIR : capture du run rouge du 30/10 et du run vert du 31/10 dans Airflow, de l'alerte Discord, et du résultat du test dbt] |
+| **Preuve** | `preuves/incident2_dbt_build_echec.png` : `Failure in test assert_lot_noemie_present`, `PASS=31 ERROR=1 SKIP=15` (les 15 modèles et tests de gold sont sautés), 3 essais de 40 s. `preuves/incident2_alerte_discord.png` : « tâche dbt_build en échec pour le lot du 2026-10-30 (run du 2026-10-31, essai 3) », reçue à 10:56. Run vert du 31/10 : [À REMPLIR pendant le backfill] |
 
 | Lot | Run Airflow | Durée | Résultat |
 |---|---|---|---|
-| 30/10 | [À REMPLIR] | [À REMPLIR] | rouge : `dbt_build` en échec, gold non publié, alerte Discord |
-| 31/10 | [À REMPLIR] | [À REMPLIR] | vert : rattrapage, [À REMPLIR] décomptes chargés |
+| 30/10 | Trigger manuel, date logique 31/10 (03/11, 09:50) | `dbt_build` : 3 × 40 s | rouge : `NO_FILE`, test de complétude en échec, gold non publié, alerte Discord |
+| 31/10 | [À REMPLIR pendant le backfill] | [À REMPLIR] | vert : rattrapage des décomptes des deux jours |
 
 ## Bonus · Changement de schéma des factures (si on nous le demande)
 
