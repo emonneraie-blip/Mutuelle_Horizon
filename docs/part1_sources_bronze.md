@@ -20,7 +20,7 @@ docker-compose.crm.yml   Postgres du CRM (source opérationnelle)
 | Opticiens réels | vrai SIRET (vérifié par la vraie API SIRENE), **nom toujours fictif** |
 | Références | extraits SIRENE / RPPS figés dans `data_generator/ref/` : même seed = mêmes fichiers sur toutes les machines |
 | Jeu officiel | `--seed 42`, incident NOEMIE du 30/10 inclus par défaut, ≥ 5 fraudes par règle, une F5 le 04/11, 1 facture invalide par jour (quarantaine) |
-| Démo | préchargement jusqu'au **03/11 inclus** ; jeudi 5, « Trigger » → le run traite le **04/11** |
+| Démo | préchargement jusqu'au **03/11 inclus** ; jeudi 5, retrait de la pause → le run planifié traite le **04/11** |
 | Ordre de chargement | d'abord `run_day` jusqu'au 03/11 (Clément développe dbt dessus) ; quand le DAG et dbt sont prêts : `reset_demo` (SIRENE / RPPS conservés) puis backfill Airflow |
 | Remise à zéro | `jobs.reset_demo` : `TRUNCATE` (efface aussi la mémoire de chargement de COPY, contrairement à `DELETE`) |
 
