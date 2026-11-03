@@ -46,4 +46,4 @@ Chaque tâche affiche sa commande au lieu de la lancer. On vérifie ainsi l'ordr
 
 Le DAG traite la veille de sa date logique.
 - Préchargement (mercredi) : rattrapage des dates logiques du 27/10 au 04/11, soit les lots du 26/10 au 03/11.
-- Run live (jeudi 05/11) : Trigger sans changer la date, ce qui traite le lot du 04/11.
+- Run live (jeudi 05/11) : retirer la pause, sans cliquer sur Déclencher. Le run planifié traite le lot du 04/11 (voir `docs/demo.md`).
