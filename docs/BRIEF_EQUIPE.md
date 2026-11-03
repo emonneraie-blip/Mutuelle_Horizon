@@ -234,7 +234,7 @@ La **spécification exécutable** de chaque règle, de chaque nettoyage, de la q
    - comptes : `SVC_INGEST` pour l'ingestion, `SVC_TRANSFORM` pour dbt ;
    - préchargement par **backfill** (dates logiques du 27/10 au 04/11 = lots du 26/10 au 03/11) : l'historique Airflow garde le run rouge du 30/10 et le vert du 31/10 ;
    - script de démo : `jobs.reset_demo --yes` puis rechargement, pour les répétitions et la vidéo.
-4. **Sécurité (C7)** : la démo « accès refusé » (`USE ROLE ANALYST_ROLE; USE SECONDARY ROLES NONE; SELECT * FROM GOLD.MART_FACTURES_A_CONTROLER;` → erreur, alors que `KPI_FRAUDE_QUOTIDIEN` passe) et `docs/security.md`.
+4. **Sécurité (C7)** : la démo « accès refusé » (`USE ROLE ANALYST_ROLE; USE SECONDARY ROLES NONE; USE WAREHOUSE BI_WH; SELECT * FROM MUTUELLE_FRAUD.GOLD.MART_FACTURES_A_CONTROLER;` → erreur, alors que `KPI_FRAUDE_QUOTIDIEN` passe) et `docs/security.md`.
 5. **FinOps (C7)** :
    - coût réel du prototype : `ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY`, par entrepôt ;
    - projection mensuelle avec ses hypothèses ;
