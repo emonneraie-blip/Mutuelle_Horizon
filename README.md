@@ -136,6 +136,7 @@ docker compose up -d --build && cd ..  # http://localhost:8080, the DAG starts p
 **7. Daily loads up to 03/11.** In Airflow: *Déclencher* → *Rattrapage*, logical dates **27/10 06:00 → 04/11 06:00**
 (batches 26/10 → 03/11). A backfill stays queued while the DAG is paused: unpause it during the backfill, then pause it again.
 The run of 31/10 (batch 30/10) is red on purpose (NOEMIE incident) and the next one is green.
+At the end, check that the last batch in GOLD is 03/11; otherwise run dbt for 03/11 (step 8).
 Without Airflow: `run jobs.run_day --date <D> --simulate-crm` for each day, then step 8.
 
 **8. dbt by hand (optional) and dashboard.**
@@ -148,7 +149,7 @@ docker run --rm -e SNOWFLAKE_ACCOUNT -e NIR_SALT -e SNOWFLAKE_USER=SVC_TRANSFORM
 # expected: PASS=46 WARN=0 ERROR=0
 ```
 
-Dashboard: Snowsight → Projects → Streamlit → `DASHBOARD_ANTI_FRAUDE` → Start. Details: [`dashboard/README.md`](dashboard/README.md).
+Dashboard: Snowsight → Projects → Streamlit → `DASHBOARD_ANTI_FRAUDE` (about 1 minute to start). On a new account, create it first with `dashboard/streamlit_app.py`: [`dashboard/README.md`](dashboard/README.md).
 
 ## How a day runs
 
@@ -193,8 +194,8 @@ Then steps 4 (`seed_postgres`), 5 (history loads) and 7 (backfill). SIRENE / RPP
 
 - One role per layer, one service account per layer (RSA key only), the grader only reads SILVER / GOLD / OPS, `ANALYST_ROLE`
   only reads the daily KPI. NIR hashed with a secret salt in SILVER. No secret in Git. [`docs/security.md`](docs/security.md)
-- 3 XSMALL warehouses with 60 s auto-suspend, a 20-credit monthly resource monitor that suspends everything at 100 %,
-  Airflow and Docker on the demo machine (0 €). [`docs/finops.md`](docs/finops.md)
+- 3 XSMALL warehouses with 60 s auto-suspend, a 20-credit monthly resource monitor that suspends the 3 warehouses at 100 %,
+  Airflow and Docker on the demo machine (0 €). The dashboard compute pool is not covered by the monitor: stop the app after use. [`docs/finops.md`](docs/finops.md)
 - Shutdown after grading: [`docs/finops.md`](docs/finops.md), section 5 (`terraform destroy` + manual clean-up).
 
 Rules of the repo: no direct push on `main`, one branch and one reviewed pull request per change.
