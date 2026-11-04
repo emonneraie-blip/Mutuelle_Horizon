@@ -182,10 +182,9 @@ One gesture only: **unpause the DAG**. Airflow then creates the scheduled run of
 **04/11**. Do not click *Déclencher*: it unpauses the DAG by default and would add a second run on the same batch.
 Full procedure: [`docs/demo.md`](docs/demo.md).
 
-Recorded run (plan B, 2 min 40): [`docs/video/mutuelle_horizon_demo_airflow.mp4`](docs/video/mutuelle_horizon_demo_airflow.mp4): backfill of 9 days in Airflow,
-NOEMIE incident (red run, Discord alert), recovery, and replay without duplicates (`ALREADY_LOADED`).
-
-Recorded dashboard walkthrough: [`docs/video/mutuelle_horizon_demo_dashboard.mp4`](docs/video/mutuelle_horizon_demo_dashboard.mp4), on the batch of 03/11.
+Recorded demo (plan B, 4 min 56, subtitled): [`docs/video/mutuelle_horizon_demo.mp4`](docs/video/mutuelle_horizon_demo.mp4):
+backfill of 9 days in Airflow, NOEMIE incident (red run, Discord alert) and recovery, replay without duplicates (`ALREADY_LOADED`),
+anti-fraud dashboard, and access denied for `ANALYST_ROLE`.
 
 ## Reset (rehearsals, video)
 
