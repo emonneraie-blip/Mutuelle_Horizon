@@ -2,7 +2,7 @@
 
 Principe : on paie seulement le calcul réellement utilisé, on le voit par usage, et un garde-fou coupe tout avant une mauvaise surprise.
 
-> Les valeurs `[À REMPLIR]` viennent du test réel (E2). Les vues `ACCOUNT_USAGE` ont jusqu'à 3 h de retard : lancer les requêtes au moins 3 h après le run.
+> Chiffres mesurés le 03/11 sur `SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY` (heure de Paris). Ces vues ont jusqu'à 3 h de retard.
 
 ## 1. Ce qui coûte, et ce qui est gratuit
 
@@ -25,8 +25,8 @@ SELECT warehouse_name,
        ROUND(SUM(credits_used), 4) AS credits
 FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY
 WHERE warehouse_name IN ('INGEST_WH', 'TRANSFORM_WH', 'BI_WH')
-  AND start_time >= '[À REMPLIR : début du run, ex. 2026-11-03 18:00]'
-  AND start_time <  '[À REMPLIR : fin du run + 1 h]'
+  AND start_time >= '2026-11-03 00:00'
+  AND start_time <  '2026-11-04 00:00'
 GROUP BY 1
 ORDER BY 2 DESC;
 ```
@@ -39,16 +39,20 @@ SELECT warehouse_name,
        ROUND(SUM(total_elapsed_time) / 1000, 1)   AS secondes
 FROM TABLE(MUTUELLE_FRAUD.INFORMATION_SCHEMA.QUERY_HISTORY(RESULT_LIMIT => 10000))
 WHERE warehouse_name IN ('INGEST_WH', 'TRANSFORM_WH', 'BI_WH')
-  AND start_time >= '[À REMPLIR : début du run]'
+  AND start_time >= '2026-11-03 09:00'
 GROUP BY 1;
 ```
 
-| Entrepôt | Crédits pour 1 run | Durée de la tâche Airflow |
-|---|---|---|
-| `INGEST_WH` | [À REMPLIR] | [À REMPLIR] |
-| `TRANSFORM_WH` | [À REMPLIR] | [À REMPLIR] |
-| `BI_WH` (consultation du dashboard) | [À REMPLIR] | — |
-| **Total** | **[À REMPLIR]** | **run complet : [À REMPLIR]** |
+Mesure par heure (03/11). Le créneau de 09:00 ne contient qu'un seul run complet, le run planifié de 09:49 (1 min 02 s) :
+
+| Entrepôt | 09:00 (1 run) | 10:00 (incident NOEMIE : 3 essais de dbt + tests) | 11:00 (reprise) | Total du 03/11 |
+|---|---|---|---|---|
+| `INGEST_WH` | 0,0265 | 0,0484 | 0,0257 | 0,1006 |
+| `TRANSFORM_WH` | 0,0840 | 0,1614 | 0,0844 | 0,3749 |
+| `BI_WH` (dashboard) | 0,0002 | 0,0237 | 0,0234 | 0,0716 |
+| **Total** | **0,111** | 0,234 | 0,134 | **0,547** |
+
+**Un run quotidien coûte environ 0,11 crédit** : 0,03 pour l'ingestion et 0,08 pour dbt. Une heure de consultation du dashboard coûte environ 0,024 crédit.
 
 Un entrepôt XSMALL consomme 1 crédit par heure de fonctionnement, facturé à la seconde avec 60 s minimum à chaque démarrage. Un run qui réveille deux entrepôts quelques minutes coûte donc une petite fraction de crédit.
 
@@ -57,13 +61,19 @@ Un entrepôt XSMALL consomme 1 crédit par heure de fonctionnement, facturé à 
 | Hypothèse | Valeur |
 |---|---|
 | Runs par an | 365 (un par matin) |
-| Crédits par run | [À REMPLIR, section 2] |
-| Prix d'un crédit | [À REMPLIR : prix de l'édition et de la région du compte, Snowsight > Admin > Cost Management] |
-| Consultation du dashboard | [À REMPLIR] min par jour sur `BI_WH` |
+| Crédits par run | 0,11 (mesuré, section 2) |
+| Dashboard | 1 h de consultation par jour ouvré (250 jours), soit 0,024 crédit par heure |
+| Prix d'un crédit | **3 $ (hypothèse, ordre de grandeur Standard / Enterprise ; à remplacer par le prix réel du contrat)** |
 
-Coût annuel ≈ 365 × crédits par run × prix d'un crédit = **[À REMPLIR] € par an**.
+| Poste | Crédits par an | Coût par an |
+|---|---|---|
+| Pipeline (365 × 0,11) | 40 | 120 $ |
+| Dashboard (250 × 0,024) | 6 | 18 $ |
+| **Total entrepôts** | **46** | **≈ 140 $** |
 
-À comparer à l'enjeu : l'objectif est de bloquer environ **0,5 M€ de fraude optique par an**. Le pipeline coûte donc [À REMPLIR] fois moins que ce qu'il doit faire économiser.
+Le compute pool du dashboard s'ajoute à ce total (section 1). On le maîtrise en arrêtant l'application quand elle ne sert pas.
+
+Par mois, cela fait environ **4 crédits**, très loin du quota de 20 du resource monitor. À comparer à l'enjeu : l'objectif est de bloquer environ **0,5 M€ de fraude optique par an**, soit plus de 3 000 fois le coût du pipeline.
 
 Ce qui ferait monter le coût : un volume ×100 (mutuelle nationale), un dashboard en accès direct très consulté, ou un passage au temps réel. On resterait sur des XSMALL, sauf si `dbt build` dépassait quelques minutes.
 
@@ -77,7 +87,7 @@ Resource monitor `MUTUELLE_MONITOR` (créé à la main par ACCOUNTADMIN dans `te
 | 80 % | e-mail |
 | 100 % | **les 3 entrepôts sont suspendus** |
 
-Vérification : `SHOW RESOURCE MONITORS LIKE 'MUTUELLE_MONITOR';` → [À REMPLIR : crédits consommés / quota].
+Vérification du 04/11 : `SHOW RESOURCE MONITORS LIKE 'MUTUELLE_MONITOR';` → **0,72 crédit consommé sur 20** depuis le 02/11, pour toute la construction, les tests, les incidents et les répétitions. Alertes à 50 % et 80 %, arrêt à 100 %, niveau WAREHOUSE.
 
 Terraform ignore volontairement ce rattachement (`ignore_changes` dans le module warehouse) : un `apply` ne le retire jamais.
 
