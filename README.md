@@ -185,6 +185,8 @@ Full procedure: [`docs/demo.md`](docs/demo.md).
 Recorded run (plan B, 2 min 40): [`docs/video/mutuelle_horizon_demo_airflow.mp4`](docs/video/mutuelle_horizon_demo_airflow.mp4): backfill of 9 days in Airflow,
 NOEMIE incident (red run, Discord alert), recovery, and replay without duplicates (`ALREADY_LOADED`).
 
+Recorded dashboard walkthrough: [`docs/video/mutuelle_horizon_demo_dashboard.mp4`](docs/video/mutuelle_horizon_demo_dashboard.mp4), on the batch of 03/11.
+
 ## Reset (rehearsals, video)
 
 ```bash
