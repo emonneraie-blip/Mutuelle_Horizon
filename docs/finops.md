@@ -1,6 +1,6 @@
 # FinOps · coûts du prototype (owner : Eliott)
 
-Principe : on paie seulement le calcul réellement utilisé, on le voit par usage, et un garde-fou coupe tout avant une mauvaise surprise.
+Principe : on paie seulement le calcul réellement utilisé, on le voit par usage, et un garde-fou coupe les 3 entrepôts avant une mauvaise surprise.
 
 > Chiffres mesurés le 03/11 sur `SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY` (heure de Paris). Ces vues ont jusqu'à 3 h de retard.
 
@@ -43,16 +43,16 @@ WHERE warehouse_name IN ('INGEST_WH', 'TRANSFORM_WH', 'BI_WH')
 GROUP BY 1;
 ```
 
-Mesure par heure (03/11). Le créneau de 09:00 ne contient qu'un seul run complet, le run planifié de 09:49 (1 min 02 s) :
+Mesure par heure (03/11). Les créneaux de 09:00 et de 11:00 contiennent chacun 2 `dbt build` (09:50 et 09:57, 11:03 et 11:40, voir `OPS.DBT_RESULTS`). Le créneau de 12:00 n'en contient qu'un :
 
-| Entrepôt | 09:00 (1 run) | 10:00 (incident NOEMIE : 3 essais de dbt + tests) | 11:00 (reprise) | Total du 03/11 |
-|---|---|---|---|---|
-| `INGEST_WH` | 0,0265 | 0,0484 | 0,0257 | 0,1006 |
-| `TRANSFORM_WH` | 0,0840 | 0,1614 | 0,0844 | 0,3749 |
-| `BI_WH` (dashboard) | 0,0002 | 0,0237 | 0,0234 | 0,0716 |
-| **Total** | **0,111** | 0,234 | 0,134 | **0,547** |
+| Entrepôt | 09:00 (ingestion + 2 dbt) | 10:00 (incident NOEMIE : 3 essais de dbt + tests) | 11:00 (reprise : ingestion + 2 dbt) | 12:00 (1 dbt) | Total du 03/11 |
+|---|---|---|---|---|---|
+| `INGEST_WH` | 0,0265 | 0,0484 | 0,0257 | 0 | 0,1006 |
+| `TRANSFORM_WH` | 0,0840 | 0,1614 | 0,0844 | 0,0451 | 0,3749 |
+| `BI_WH` (dashboard) | 0,0002 | 0,0237 | 0,0234 | 0,0243 | 0,0716 |
+| **Total** | 0,111 | 0,234 | 0,134 | 0,069 | **0,547** |
 
-**Un run quotidien coûte environ 0,11 crédit** : 0,03 pour l'ingestion et 0,08 pour dbt. Une heure de consultation du dashboard coûte environ 0,024 crédit.
+**Un run quotidien coûte environ 0,07 crédit** : 0,027 pour l'ingestion (créneau de 09:00) et 0,045 pour un `dbt build` (créneau de 12:00). Une consultation courte du dashboard (environ 90 s d'entrepôt) coûte environ 0,024 crédit.
 
 Un entrepôt XSMALL consomme 1 crédit par heure de fonctionnement, facturé à la seconde avec 60 s minimum à chaque démarrage. Un run qui réveille deux entrepôts quelques minutes coûte donc une petite fraction de crédit.
 
@@ -61,19 +61,19 @@ Un entrepôt XSMALL consomme 1 crédit par heure de fonctionnement, facturé à 
 | Hypothèse | Valeur |
 |---|---|
 | Runs par an | 365 (un par matin) |
-| Crédits par run | 0,11 (mesuré, section 2) |
-| Dashboard | 1 h de consultation par jour ouvré (250 jours), soit 0,024 crédit par heure |
+| Crédits par run | 0,07 (mesuré, section 2) |
+| Dashboard | une consultation courte par jour ouvré (250 jours), soit 0,024 crédit par consultation ; une consultation longue coûte plus cher (jusqu'à 1 crédit par heure d'entrepôt allumé) |
 | Prix d'un crédit | **3 $ (hypothèse, ordre de grandeur Standard / Enterprise ; à remplacer par le prix réel du contrat)** |
 
 | Poste | Crédits par an | Coût par an |
 |---|---|---|
-| Pipeline (365 × 0,11) | 40 | 120 $ |
+| Pipeline (365 × 0,07) | 26 | 78 $ |
 | Dashboard (250 × 0,024) | 6 | 18 $ |
-| **Total entrepôts** | **46** | **≈ 140 $** |
+| **Total entrepôts** | **32** | **≈ 100 $** |
 
 Le compute pool du dashboard s'ajoute à ce total (section 1). On le maîtrise en arrêtant l'application quand elle ne sert pas.
 
-Par mois, cela fait environ **4 crédits**, très loin du quota de 20 du resource monitor. À comparer à l'enjeu : l'objectif est de bloquer environ **0,5 M€ de fraude optique par an**, soit plus de 3 000 fois le coût du pipeline.
+Par mois, cela fait moins de **3 crédits**, très loin du quota de 20 du resource monitor. À comparer à l'enjeu : l'objectif est de bloquer environ **0,5 M€ de fraude optique par an**, soit plus de 5 000 fois le coût du pipeline.
 
 Ce qui ferait monter le coût : un volume ×100 (mutuelle nationale), un dashboard en accès direct très consulté, ou un passage au temps réel. On resterait sur des XSMALL, sauf si `dbt build` dépassait quelques minutes.
 
