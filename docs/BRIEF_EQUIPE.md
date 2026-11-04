@@ -81,7 +81,7 @@ Les données de référence pour ces règles :
                                                                               Dashboard Streamlit in Snowflake (gestionnaire anti-fraude)
 
  PLATEFORME (owner Eliott) : Airflow (DAG quotidien, retries, alerte Discord) · Terraform (entrepôts, rôles, comptes,
- grants, state distant HCP) · GitHub Actions (terraform plan + tests sur chaque PR) · FinOps (XSMALL, auto-suspend, resource monitor)
+ grants, state distant HCP) · GitHub Actions (terraform fmt + validate + tests sur chaque PR) · FinOps (XSMALL, auto-suspend, resource monitor)
 ```
 
 **Les choix à défendre (C4)**
@@ -156,7 +156,7 @@ Mutuelle_Horizon/
 ├── README.md                  ← pitch, schéma, "lancer la démo en 6 commandes"     (tous)
 ├── .github/
 │   ├── CODEOWNERS             ← qui relit quoi
-│   └── workflows/ci.yml       ← terraform plan + tests Python sur chaque PR        (Eliott)
+│   └── workflows/ci.yml       ← terraform fmt + validate + tests Python sur chaque PR        (Eliott)
 ├── .gitignore  .env.example  docker-compose.crm.yml
 ├── data_generator/            ← données réalistes + fraudes + corrigé + validate   (Lucas)
 ├── ingestion/                 ← jobs Python, SQL bronze, Dockerfile → fraud-ingest:1.0.0   (Lucas)
@@ -225,7 +225,7 @@ La **spécification exécutable** de chaque règle, de chaque nettoyage, de la q
    - Lucas exécute `terraform/bootstrap_admin.sql`, l'étape manuelle : utilisateurs `ELIOTT`, `CLEMENT`, `SVC_TERRAFORM` et le resource monitor ;
    - Eliott fait le **Terraform**, en reprenant le TD (module warehouse) : base, 3 entrepôts, 3 rôles, 2 comptes de service (`snowflake_service_user`, avec les clés publiques de Lucas), grants (usage, `CREATE SCHEMA` pour INGEST et TRANSFORM, rôles rattachés à SYSADMIN), et lecture pour `REDGRAVE_GRADER` sur SILVER / GOLD / OPS seulement (aucun rôle hors INGEST / TRANSFORM ne lit BRONZE) ;
    - **state distant sur HCP Terraform** (gratuit, verrouillé).
-2. **CI** `ci.yml` sur chaque PR : `terraform fmt -check`, `validate`, `plan`. ⚠️ Reprendre le workflow **corrigé** du TD : la clé est écrite dans l'étape, via `$GITHUB_ENV`, et pas dans le bloc `env:` du job. Plus un job Python qui lance `generate.py` puis `validate.py`.
+2. **CI** `ci.yml` sur chaque PR : `terraform fmt -check`, `validate` (le `plan` reste lancé en local, car il demande les identifiants Snowflake). ⚠️ Reprendre le workflow **corrigé** du TD : la clé est écrite dans l'étape, via `$GITHUB_ENV`, et pas dans le bloc `env:` du job. Plus un job Python qui lance `generate.py` puis `validate.py`.
 3. **DAG Airflow `mutuelle_fraud_daily`** (copie adaptée du TD) :
    - planification `0 6 * * *` Europe/Paris, `max_active_runs=1`, `retries=2`, alerte Discord après le dernier échec ;
    - chaque tâche est un `DockerOperator` qui traite **le lot de la veille** (`{{ macros.ds_add(ds, -1) }}`) :

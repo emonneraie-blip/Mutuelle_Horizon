@@ -39,7 +39,7 @@ docker-compose.crm.yml   Postgres du CRM (source opérationnelle)
 | Contrôles dans BRONZE après chargement | 3 848 lignes de factures / 3 837 `id_demande` (11 renvois techniques), 3 802 décomptes, 8 180 adhérents ; SIRENE : 80 SIRET trouvés et actifs, 3 introuvables (= les faux SIRET F4) ; `LOAD_AUDIT` sans erreur |
 | Incident NOEMIE du 30/10 | `NO_FILE` (avertissement, pas d'échec) le 30/10, puis 318 décomptes le 31/10 (rattrapage) |
 | **Idempotence** (rejeu du 27/10 après le 03/11) | factures et NOEMIE `ALREADY_LOADED` (0 ligne), CRM `MERGE: 0 inserted, 0 updated`, SIRENE 0 appel |
-| `reset_demo` (TRUNCATE + stage + CRM) | SQL relu et simulé, **pas encore exécuté** : à faire avant la première répétition |
+| `reset_demo` (TRUNCATE + stage + CRM) | exécuté le 04/11 après la répétition du lot du 04/11, puis historique rechargé et backfill jusqu'au 03/11 : le gold est revenu à 9 lots, sans le 04/11 |
 
 ## Pas à pas
 
